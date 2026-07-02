@@ -33,9 +33,17 @@
       }
     ],
     "events": {
+      "endpoint": {
+        "uri": "arn:aws:lambda:us-east-1:107554921703:function:97fb82d9-ff6f-4f80-8339-27fe7a699f0d:Release_0"
+      },
       "publications": [
         {
           "eventName": "AMAZON.OrderStatus.Updated"
+        }
+      ],
+      "subscriptions": [
+        {
+          "eventName": "SKILL_PROACTIVE_SUBSCRIPTION_CHANGED"
         }
       ]
     },
