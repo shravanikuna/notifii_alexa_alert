@@ -1,183 +1,140 @@
-# -*- coding: utf-8 -*-
-
-# This sample demonstrates handling intents from an Alexa skill using the Alexa Skills Kit SDK for Python.
-# Please visit https://alexa.design/cookbook for additional examples on implementing slots, dialog management,
-# session persistence, api calls, and more.
-# This sample is built using the handler classes approach in skill builder.
 import logging
+import os
+import http.client
+import json
+import requests
 import ask_sdk_core.utils as ask_utils
-
 from ask_sdk_core.skill_builder import SkillBuilder
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
-from ask_sdk_core.dispatch_components import AbstractExceptionHandler
 from ask_sdk_core.handler_input import HandlerInput
-
 from ask_sdk_model import Response
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+# ====================================================================
+# 1. ALEXA REQUEST HANDLERS
+# ====================================================================
 
+class PackageStatusIntentHandler(AbstractRequestHandler):
+    """Handler for Package Status Intent"""
+    def can_handle(self, handler_input):
+        return ask_utils.is_intent_name("PackageStatusIntent")(handler_input)
+
+    def handle(self, handler_input):
+        speak_output = "You have 2 packages waiting. One from FedEx arrived today, and one from UPS arrived yesterday."
+        return handler_input.response_builder.speak(speak_output).response
+
+class MailroomHoursIntentHandler(AbstractRequestHandler):
+    """Handler for Mailroom Hours Intent"""
+    def can_handle(self, handler_input):
+        return ask_utils.is_intent_name("MailroomHoursIntent")(handler_input)
+
+    def handle(self, handler_input):
+        speak_output = "The mailroom is open from 8 AM to 8 PM, Monday through Friday."
+        return handler_input.response_builder.speak(speak_output).response
+
+class LockerAccessIntentHandler(AbstractRequestHandler):
+    """Handler for Locker Access Intent"""
+    def can_handle(self, handler_input):
+        return ask_utils.is_intent_name("LockerAccessIntent")(handler_input)
+
+    def handle(self, handler_input):
+        speak_output = "Your package is in locker B4. Please use access code 12345."
+        return handler_input.response_builder.speak(speak_output).response
 
 class LaunchRequestHandler(AbstractRequestHandler):
-    """Handler for Skill Launch."""
+    """Handler for Skill Launch"""
     def can_handle(self, handler_input):
-        # type: (HandlerInput) -> bool
-
         return ask_utils.is_request_type("LaunchRequest")(handler_input)
 
     def handle(self, handler_input):
-        # type: (HandlerInput) -> Response
-        speak_output = "Welcome, you can say Hello or Help. Which would you like to try?"
-
-        return (
-            handler_input.response_builder
-                .speak(speak_output)
-                .ask(speak_output)
-                .response
-        )
+        speak_output = "Welcome to Notiffi Alert. You can ask about your packages, locker access, or mailroom hours."
+        return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
 
 
-class HelloWorldIntentHandler(AbstractRequestHandler):
-    """Handler for Hello World Intent."""
-    def can_handle(self, handler_input):
-        # type: (HandlerInput) -> bool
-        return ask_utils.is_intent_name("HelloWorldIntent")(handler_input)
+# ====================================================================
+# 2. PROACTIVE NOTIFICATIONS & UTILITY LOGIC
+# ====================================================================
 
-    def handle(self, handler_input):
-        # type: (HandlerInput) -> Response
-        speak_output = "Hello World!"
-
-        return (
-            handler_input.response_builder
-                .speak(speak_output)
-                # .ask("add a reprompt if you want to keep the session open for the user to respond")
-                .response
-        )
-
-
-class HelpIntentHandler(AbstractRequestHandler):
-    """Handler for Help Intent."""
-    def can_handle(self, handler_input):
-        # type: (HandlerInput) -> bool
-        return ask_utils.is_intent_name("AMAZON.HelpIntent")(handler_input)
-
-    def handle(self, handler_input):
-        # type: (HandlerInput) -> Response
-        speak_output = "You can say hello to me! How can I help?"
-
-        return (
-            handler_input.response_builder
-                .speak(speak_output)
-                .ask(speak_output)
-                .response
-        )
-
-
-class CancelOrStopIntentHandler(AbstractRequestHandler):
-    """Single handler for Cancel and Stop Intent."""
-    def can_handle(self, handler_input):
-        # type: (HandlerInput) -> bool
-        return (ask_utils.is_intent_name("AMAZON.CancelIntent")(handler_input) or
-                ask_utils.is_intent_name("AMAZON.StopIntent")(handler_input))
-
-    def handle(self, handler_input):
-        # type: (HandlerInput) -> Response
-        speak_output = "Goodbye!"
-
-        return (
-            handler_input.response_builder
-                .speak(speak_output)
-                .response
-        )
-
-class FallbackIntentHandler(AbstractRequestHandler):
-    """Single handler for Fallback Intent."""
-    def can_handle(self, handler_input):
-        # type: (HandlerInput) -> bool
-        return ask_utils.is_intent_name("AMAZON.FallbackIntent")(handler_input)
-
-    def handle(self, handler_input):
-        # type: (HandlerInput) -> Response
-        logger.info("In FallbackIntentHandler")
-        speech = "Hmm, I'm not sure. You can say Hello or Help. What would you like to do?"
-        reprompt = "I didn't catch that. What can I help you with?"
-
-        return handler_input.response_builder.speak(speech).ask(reprompt).response
-
-class SessionEndedRequestHandler(AbstractRequestHandler):
-    """Handler for Session End."""
-    def can_handle(self, handler_input):
-        # type: (HandlerInput) -> bool
-        return ask_utils.is_request_type("SessionEndedRequest")(handler_input)
-
-    def handle(self, handler_input):
-        # type: (HandlerInput) -> Response
-
-        # Any cleanup logic goes here.
-
-        return handler_input.response_builder.response
+def send_package_notification(alexa_user_id, seller_name, status):
+    # Step 1: Get access token
+    token_url = "https://api.amazon.com/auth/o2/token"
+    payload = {
+        "grant_type": "client_credentials",
+        "client_id": "YOUR_CLIENT_ID",         # Get from Build > Permissions
+        "client_secret": "YOUR_CLIENT_SECRET", # Get from Build > Permissions
+        "scope": "alexa::proactive_events"
+    }
+    
+    response = requests.post(token_url, data=payload)
+    if response.status_code != 200:
+        return {"error": "Failed to get token"}
+    
+    access_token = response.json().get("access_token")
+    
+    # Step 2: Build notification payload
+    event_payload = {
+        "timestamp": "2026-07-02T10:00:00.00Z",
+        "referenceId": "notifii_pkg_12345",
+        "expiryTime": "2026-07-03T10:00:00.00Z",
+        "event": {
+            "name": "AMAZON.OrderStatus.Updated",
+            "payload": {
+                "state": {
+                    "status": "ORDER_DELIVERED",
+                    "deliveredOn": "2026-07-02T10:00:00.00Z"
+                },
+                "order": {
+                    "seller": {
+                        "name": "localizedattribute:sellerName"
+                    }
+                }
+            }
+        },
+        "localizedAttributes": [
+            {
+                "locale": "en-US",
+                "sellerName": seller_name
+            }
+        ],
+        "relevantAudience": {
+            "type": "Unicast",
+            "payload": {
+                "user": alexa_user_id
+            }
+        }
+    }
+    
+    # Step 3: Send notification
+    api_url = "https://api.amazonalexa.com/v1/proactiveEvents/stages/development"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    
+    response = requests.post(api_url, json=event_payload, headers=headers)
+    return {"status_code": response.status_code}
 
 
-class IntentReflectorHandler(AbstractRequestHandler):
-    """The intent reflector is used for interaction model testing and debugging.
-    It will simply repeat the intent the user said. You can create custom handlers
-    for your intents by defining them above, then also adding them to the request
-    handler chain below.
-    """
-    def can_handle(self, handler_input):
-        # type: (HandlerInput) -> bool
-        return ask_utils.is_request_type("IntentRequest")(handler_input)
-
-    def handle(self, handler_input):
-        # type: (HandlerInput) -> Response
-        intent_name = ask_utils.get_intent_name(handler_input)
-        speak_output = "You just triggered " + intent_name + "."
-
-        return (
-            handler_input.response_builder
-                .speak(speak_output)
-                # .ask("add a reprompt if you want to keep the session open for the user to respond")
-                .response
-        )
+def get_proactive_events_token(client_id, client_secret):
+    conn = http.client.HTTPSConnection("api.amazon.com")
+    payload = f"grant_type=client_credentials&client_id={client_id}&client_secret={client_secret}&scope=alexa::proactive_events"
+    headers = {'Content-Type': "application/x-www-form-urlencoded;charset=UTF-8"}
+    conn.request("POST", "/auth/o2/token", payload, headers)
+    res = conn.getresponse()
+    data = res.read()
+    return json.loads(data.decode("utf-8"))
 
 
-class CatchAllExceptionHandler(AbstractExceptionHandler):
-    """Generic error handling to capture any syntax or routing errors. If you receive an error
-    stating the request handler chain is not found, you have not implemented a handler for
-    the intent being invoked or included it in the skill builder below.
-    """
-    def can_handle(self, handler_input, exception):
-        # type: (HandlerInput, Exception) -> bool
-        return True
-
-    def handle(self, handler_input, exception):
-        # type: (HandlerInput, Exception) -> Response
-        logger.error(exception, exc_info=True)
-
-        speak_output = "Sorry, I had trouble doing what you asked. Please try again."
-
-        return (
-            handler_input.response_builder
-                .speak(speak_output)
-                .ask(speak_output)
-                .response
-        )
-
-# The SkillBuilder object acts as the entry point for your skill, routing all request and response
-# payloads to the handlers above. Make sure any new handlers or interceptors you've
-# defined are included below. The order matters - they're processed top to bottom.
-
+# ====================================================================
+# 3. SKILL ROUTING & EXPORT
+# ====================================================================
 
 sb = SkillBuilder()
 
+# Register intent handlers to the blueprint
 sb.add_request_handler(LaunchRequestHandler())
-sb.add_request_handler(HelloWorldIntentHandler())
-sb.add_request_handler(HelpIntentHandler())
-sb.add_request_handler(CancelOrStopIntentHandler())
-sb.add_request_handler(FallbackIntentHandler())
-sb.add_request_handler(SessionEndedRequestHandler())
-sb.add_request_handler(IntentReflectorHandler()) # make sure IntentReflectorHandler is last so it doesn't override your custom intent handlers
+sb.add_request_handler(PackageStatusIntentHandler())
+sb.add_request_handler(LockerAccessIntentHandler())
+sb.add_request_handler(MailroomHoursIntentHandler())
 
-sb.add_exception_handler(CatchAllExceptionHandler())
-
+# The main entrypoint mapping Alexa requests to our skill backend
 lambda_handler = sb.lambda_handler()
