@@ -59,8 +59,8 @@ def send_package_notification(alexa_user_id, seller_name, status):
     token_url = "https://api.amazon.com/auth/o2/token"
     payload = {
         "grant_type": "client_credentials",
-        "client_id": "YOUR_CLIENT_ID",         # Get from Build > Permissions
-        "client_secret": "YOUR_CLIENT_SECRET", # Get from Build > Permissions
+        "client_id": "amzn1.application-oa2-client.5569e8ec73464d7eb3e0dc2796475d97",         # Get from Build > Permissions
+        "client_secret": "amzn1.oa2-cs.v1.40cba8b5cf11772979bbbc37f3fcc66e9ebdf867da029d7f77b9977d3c0aab72", # Get from Build > Permissions
         "scope": "alexa::proactive_events"
     }
     
