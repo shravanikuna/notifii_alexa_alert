@@ -5,8 +5,8 @@ from datetime import datetime, timezone, timedelta
 
 # === CONFIGURATION ===
 # Get these from Alexa Developer Console > Build > Permissions > Alexa Skill Messaging
-CLIENT_ID = "amzn1.application-oa2-client.YOUR_CLIENT_ID"
-CLIENT_SECRET = "YOUR_CLIENT_SECRET"
+CLIENT_ID = "amzn1.application-oa2-client.5569e8ec73464d7eb3e0dc2796475d97"
+CLIENT_SECRET = "amzn1.oa2-cs.v1.40cba8b5cf11772979bbbc37f3fcc66e9ebdf867da029d7f77b9977d3c0aab72"
 
 # The Alexa user ID (get this from the skill's events or database)
 ALEXA_USER_ID = "amzn1.ask.account.USER_ID_HERE"
