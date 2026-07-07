@@ -1,38 +1,37 @@
 import logging
-import os
-import http.client
-import json
-import requests
 import ask_sdk_core.utils as ask_utils
 from ask_sdk_core.skill_builder import SkillBuilder
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_model import Response
 
-# ====================================================================
-# 1. ALEXA REQUEST HANDLERS
-# ====================================================================
+# Set up logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# ============================================
+# 1. CUSTOM INTENT HANDLERS
+# ============================================
 
 class PackageStatusIntentHandler(AbstractRequestHandler):
     """Handler for Package Status Intent"""
+    
     def can_handle(self, handler_input):
         return ask_utils.is_intent_name("PackageStatusIntent")(handler_input)
 
     def handle(self, handler_input):
         speak_output = "You have 2 packages waiting. One from FedEx arrived today, and one from UPS arrived yesterday."
+        
+        # Log the user ID for debugging (you'll get this from the request)
+        user_id = handler_input.request_envelope.context.system.user.user_id
+        logger.info(f"PackageStatusIntent triggered by user: {user_id}")
+        
         return handler_input.response_builder.speak(speak_output).response
 
-class MailroomHoursIntentHandler(AbstractRequestHandler):
-    """Handler for Mailroom Hours Intent"""
-    def can_handle(self, handler_input):
-        return ask_utils.is_intent_name("MailroomHoursIntent")(handler_input)
-
-    def handle(self, handler_input):
-        speak_output = "The mailroom is open from 8 AM to 8 PM, Monday through Friday."
-        return handler_input.response_builder.speak(speak_output).response
 
 class LockerAccessIntentHandler(AbstractRequestHandler):
     """Handler for Locker Access Intent"""
+    
     def can_handle(self, handler_input):
         return ask_utils.is_intent_name("LockerAccessIntent")(handler_input)
 
@@ -40,8 +39,21 @@ class LockerAccessIntentHandler(AbstractRequestHandler):
         speak_output = "Your package is in locker B4. Please use access code 12345."
         return handler_input.response_builder.speak(speak_output).response
 
+
+class MailroomHoursIntentHandler(AbstractRequestHandler):
+    """Handler for Mailroom Hours Intent"""
+    
+    def can_handle(self, handler_input):
+        return ask_utils.is_intent_name("MailroomHoursIntent")(handler_input)
+
+    def handle(self, handler_input):
+        speak_output = "The mailroom is open from 8 AM to 8 PM, Monday through Friday."
+        return handler_input.response_builder.speak(speak_output).response
+
+
 class LaunchRequestHandler(AbstractRequestHandler):
     """Handler for Skill Launch"""
+    
     def can_handle(self, handler_input):
         return ask_utils.is_request_type("LaunchRequest")(handler_input)
 
@@ -50,91 +62,55 @@ class LaunchRequestHandler(AbstractRequestHandler):
         return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
 
 
-# ====================================================================
-# 2. PROACTIVE NOTIFICATIONS & UTILITY LOGIC
-# ====================================================================
+class HelpIntentHandler(AbstractRequestHandler):
+    """Handler for Help Intent"""
+    
+    def can_handle(self, handler_input):
+        return ask_utils.is_intent_name("AMAZON.HelpIntent")(handler_input)
 
-def send_package_notification(alexa_user_id, seller_name, status):
-    # Step 1: Get access token
-    token_url = "https://api.amazon.com/auth/o2/token"
-    payload = {
-        "grant_type": "client_credentials",
-        "client_id": "amzn1.application-oa2-client.5569e8ec73464d7eb3e0dc2796475d97",         # Get from Build > Permissions
-        "client_secret": "amzn1.oa2-cs.v1.40cba8b5cf11772979bbbc37f3fcc66e9ebdf867da029d7f77b9977d3c0aab72", # Get from Build > Permissions
-        "scope": "alexa::proactive_events"
-    }
-    
-    response = requests.post(token_url, data=payload)
-    if response.status_code != 200:
-        return {"error": "Failed to get token"}
-    
-    access_token = response.json().get("access_token")
-    
-    # Step 2: Build notification payload
-    event_payload = {
-        "timestamp": "2026-07-02T10:00:00.00Z",
-        "referenceId": "notifii_pkg_12345",
-        "expiryTime": "2026-07-03T10:00:00.00Z",
-        "event": {
-            "name": "AMAZON.OrderStatus.Updated",
-            "payload": {
-                "state": {
-                    "status": "ORDER_DELIVERED",
-                    "deliveredOn": "2026-07-02T10:00:00.00Z"
-                },
-                "order": {
-                    "seller": {
-                        "name": "localizedattribute:sellerName"
-                    }
-                }
-            }
-        },
-        "localizedAttributes": [
-            {
-                "locale": "en-US",
-                "sellerName": seller_name
-            }
-        ],
-        "relevantAudience": {
-            "type": "Unicast",
-            "payload": {
-                "user": alexa_user_id
-            }
-        }
-    }
-    
-    # Step 3: Send notification
-    api_url = "https://api.amazonalexa.com/v1/proactiveEvents/stages/development"
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json"
-    }
-    
-    response = requests.post(api_url, json=event_payload, headers=headers)
-    return {"status_code": response.status_code}
+    def handle(self, handler_input):
+        speak_output = "You can ask me about your packages, locker access, or mailroom hours. What would you like to know?"
+        return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
 
 
-def get_proactive_events_token(client_id, client_secret):
-    conn = http.client.HTTPSConnection("api.amazon.com")
-    payload = f"grant_type=client_credentials&client_id={client_id}&client_secret={client_secret}&scope=alexa::proactive_events"
-    headers = {'Content-Type': "application/x-www-form-urlencoded;charset=UTF-8"}
-    conn.request("POST", "/auth/o2/token", payload, headers)
-    res = conn.getresponse()
-    data = res.read()
-    return json.loads(data.decode("utf-8"))
+class CancelAndStopIntentHandler(AbstractRequestHandler):
+    """Handler for Cancel and Stop Intents"""
+    
+    def can_handle(self, handler_input):
+        return ask_utils.is_intent_name("AMAZON.CancelIntent")(handler_input) or \
+               ask_utils.is_intent_name("AMAZON.StopIntent")(handler_input)
+
+    def handle(self, handler_input):
+        speak_output = "Goodbye!"
+        return handler_input.response_builder.speak(speak_output).response
 
 
-# ====================================================================
-# 3. SKILL ROUTING & EXPORT
-# ====================================================================
+class FallbackIntentHandler(AbstractRequestHandler):
+    """Handler for Fallback Intent"""
+    
+    def can_handle(self, handler_input):
+        return ask_utils.is_intent_name("AMAZON.FallbackIntent")(handler_input)
+
+    def handle(self, handler_input):
+        speak_output = "I'm sorry, I didn't understand that. You can ask about your packages, locker access, or mailroom hours."
+        return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
+
+
+# ============================================
+# 2. SKILL BUILDER - REGISTER ALL HANDLERS
+# ============================================
 
 sb = SkillBuilder()
-
-# Register intent handlers to the blueprint
 sb.add_request_handler(LaunchRequestHandler())
+sb.add_request_handler(HelpIntentHandler())
 sb.add_request_handler(PackageStatusIntentHandler())
 sb.add_request_handler(LockerAccessIntentHandler())
 sb.add_request_handler(MailroomHoursIntentHandler())
+sb.add_request_handler(CancelAndStopIntentHandler())
+sb.add_request_handler(FallbackIntentHandler())
 
-# The main entrypoint mapping Alexa requests to our skill backend
+# ============================================
+# 3. LAMBDA HANDLER (Entry Point)
+# ============================================
+
 lambda_handler = sb.lambda_handler()
