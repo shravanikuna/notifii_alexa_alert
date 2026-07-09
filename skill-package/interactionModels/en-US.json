@@ -1,6 +1,7 @@
 {
   "interactionModel": {
     "languageModel": {
+      "invocationName": "notiffi alert",
       "intents": [
         {
           "name": "AMAZON.CancelIntent",
@@ -15,29 +16,50 @@
           "samples": []
         },
         {
-          "slots": [],
-          "name": "HelloWorldIntent",
-          "samples": [
-            "hello",
-            "how are you",
-            "say hi world",
-            "say hi",
-            "hi",
-            "say hello world",
-            "say hello"
-          ]
-        },
-        {
           "name": "AMAZON.NavigateHomeIntent",
           "samples": []
         },
         {
           "name": "AMAZON.FallbackIntent",
           "samples": []
+        },
+        {
+          "name": "PackageStatusIntent",
+          "slots": [],
+          "samples": [
+            "check my packages",
+            "do I have any packages",
+            "package status",
+            "any deliveries today",
+            "what packages are waiting",
+            "how many packages do I have"
+          ]
+        },
+        {
+          "name": "LockerAccessIntent",
+          "slots": [],
+          "samples": [
+            "get my access code",
+            "locker code",
+            "how to open my locker",
+            "access my package",
+            "open my locker",
+            "what's my locker number"
+          ]
+        },
+        {
+          "name": "MailroomHoursIntent",
+          "slots": [],
+          "samples": [
+            "when does the mailroom open",
+            "mailroom hours",
+            "when does the mailroom close",
+            "what are the mailroom hours",
+            "mailroom schedule"
+          ]
         }
       ],
-      "types": [],
-      "invocationName": "notiffi alert"
+      "types": []
     }
   }
 }
