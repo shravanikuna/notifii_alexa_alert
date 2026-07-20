@@ -23,7 +23,6 @@ logger.setLevel(logging.INFO)
 # ============================================
 # CONFIGURATION
 # ============================================
-
 class Config:
     """Configuration settings from environment variables"""
     
@@ -113,7 +112,7 @@ class NotifiiAPIClient:
 notifii_client = NotifiiAPIClient()
 
 # ============================================
-# ALEXA PROACTIVE EVENTS INTEGRATION (SINGLE CLASS - FIXED)
+# ALEXA PROACTIVE EVENTS INTEGRATION
 # ============================================
 
 class AlexaProactiveEventsClient:
@@ -148,13 +147,10 @@ class AlexaProactiveEventsClient:
     
     def send_notification(self, alexa_user_id: str, seller_name: str, status: str = "ORDER_DELIVERED", reference_id: str = None) -> Dict:
         """Send a proactive notification to a user"""
-        
-        # Get token
         token = self.get_token()
         if not token:
             return {"status": "error", "message": "Failed to get access token"}
         
-        # Build payload
         reference_id = reference_id or f"notifii_{uuid.uuid4()}"
         now = datetime.utcnow()
         now_str = now.isoformat() + "Z"
@@ -191,10 +187,8 @@ class AlexaProactiveEventsClient:
             }
         }
         
-        # Log the payload for debugging
         logger.info(f"Sending payload: {json.dumps(payload, indent=2)}")
         
-        # Send request
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json"
@@ -202,14 +196,12 @@ class AlexaProactiveEventsClient:
         
         try:
             response = requests.post(self.api_url, json=payload, headers=headers)
-            
             if response.status_code == 202:
                 logger.info(f"✅ Notification sent successfully to {alexa_user_id}")
                 return {"status": "success", "code": 202, "referenceId": reference_id}
             else:
                 logger.error(f"❌ Notification failed: {response.status_code} - {response.text}")
                 return {"status": "error", "code": response.status_code, "message": response.text}
-                
         except Exception as e:
             logger.error(f"Notification error: {str(e)}")
             return {"status": "error", "message": str(e)}
@@ -230,11 +222,9 @@ class AIPackageAnalyzer:
         self.waiting_days = self._calculate_waiting_days()
     
     def _calculate_waiting_days(self) -> int:
-        """Calculate days the package has been waiting"""
         delivered_at = self.package.get('delivered_at')
         if not delivered_at:
             return 0
-        
         try:
             delivered = datetime.fromisoformat(delivered_at.replace('Z', '+00:00'))
             now = datetime.now(delivered.tzinfo)
@@ -243,43 +233,27 @@ class AIPackageAnalyzer:
             return 0
     
     def _get_time_of_day(self) -> str:
-        """Get current time of day for context"""
         hour = datetime.now().hour
-        if 5 <= hour < 12:
-            return "morning"
-        elif 12 <= hour < 17:
-            return "afternoon"
-        elif 17 <= hour < 21:
-            return "evening"
-        else:
-            return "night"
+        if 5 <= hour < 12: return "morning"
+        elif 12 <= hour < 17: return "afternoon"
+        elif 17 <= hour < 21: return "evening"
+        else: return "night"
     
     def _get_urgency(self) -> str:
-        """Determine urgency level"""
         days = self.waiting_days
-        if days >= 7:
-            return "critical"
-        elif days >= 5:
-            return "high"
-        elif days >= 3:
-            return "medium"
-        else:
-            return "low"
+        if days >= 7: return "critical"
+        elif days >= 5: return "high"
+        elif days >= 3: return "medium"
+        else: return "low"
     
     def _generate_carrier_name(self) -> str:
-        """Get friendly carrier name"""
         carrier = self.package.get('carrier', 'unknown')
         carrier_map = {
-            'FDX': 'FedEx',
-            'UPS': 'UPS',
-            'USPS': 'USPS',
-            'AMZN': 'Amazon',
-            'DHL': 'DHL'
+            'FDX': 'FedEx', 'UPS': 'UPS', 'USPS': 'USPS', 'AMZN': 'Amazon', 'DHL': 'DHL'
         }
         return carrier_map.get(carrier, carrier)
     
     def analyze(self) -> Dict:
-        """Perform full contextual analysis"""
         return {
             'carrier': self._generate_carrier_name(),
             'compartment': self.package.get('compartment', 'locker'),
@@ -291,9 +265,7 @@ class AIPackageAnalyzer:
         }
     
     def generate_notification_message(self) -> str:
-        """Generate natural language notification message"""
         context = self.analyze()
-        
         if context['waiting_days'] == 0:
             return f"Your package from {context['carrier']} has arrived in {context['compartment']}."
         elif context['waiting_days'] < 3:
@@ -308,7 +280,6 @@ class AIPackageAnalyzer:
             return f"Your package from {context['carrier']} is ready for pickup in {context['compartment']}."
     
     def get_delivery_status(self) -> str:
-        """Get the appropriate delivery status for the payload"""
         return "ORDER_DELIVERED"
 
 
@@ -319,79 +290,52 @@ class AIPackageAnalyzer:
 def handle_package_event(event: Dict, context: Any) -> Dict:
     """Main handler for package delivery events from Notifii"""
     logger.info(f"Received package event: {event}")
-    
     try:
         package_data = event.get('data', {})
         unit = package_data.get('unit')
         package_id = package_data.get('package_id')
-        
         if not unit or not package_id:
             logger.error("Missing required fields: unit or package_id")
             return {"status": "error", "message": "Missing required fields"}
-    
     except Exception as e:
         logger.error(f"Error parsing webhook: {str(e)}")
         return {"status": "error", "message": str(e)}
     
-    # Fetch user configuration
     user_config = notifii_client.get_user_configuration(unit)
     if not user_config:
         logger.error(f"User not found for unit: {unit}")
         return {"status": "error", "message": "User not found"}
     
-    # Check if user has opted into Alexa
     if not user_config.get('opted_alexa', False):
         logger.info(f"User {unit} has not opted into Alexa notifications")
         return {"status": "skipped", "reason": "User not opted in"}
     
-    # Check if user has an Alexa ID
     alexa_user_id = user_config.get('alexa_user_id')
     if not alexa_user_id:
         logger.info(f"User {unit} has no Alexa ID linked")
         return {"status": "skipped", "reason": "No Alexa ID linked"}
     
-    # Fetch full package details
-    package_details = notifii_client.get_package_details(package_id)
-    if not package_details:
-        package_details = package_data
+    package_details = notifii_client.get_package_details(package_id) or package_data
     
-    # AI Agent contextual analysis
     analyzer = AIPackageAnalyzer(package_details, user_config)
     message = analyzer.generate_notification_message()
     status = analyzer.get_delivery_status()
-    context = analyzer.analyze()
+    context_info = analyzer.analyze()
     
-    logger.info(f"AI Analysis: {context}")
-    logger.info(f"Generated message: {message}")
-    
-    # Send proactive notification
     result = alexa_client.send_notification(
         alexa_user_id=alexa_user_id,
-        seller_name=context['carrier'],
+        seller_name=context_info['carrier'],
         status=status,
         reference_id=f"notifii_{package_id}"
     )
     
     if result.get('status') == 'success':
-        logger.info(f"Notification sent successfully for package {package_id}")
         return {
-            "status": "success",
-            "package_id": package_id,
-            "unit": unit,
-            "notification": {
-                "alexa_user_id": alexa_user_id,
-                "message": message,
-                "sent_at": datetime.utcnow().isoformat()
-            }
+            "status": "success", "package_id": package_id, "unit": unit,
+            "notification": {"alexa_user_id": alexa_user_id, "message": message, "sent_at": datetime.utcnow().isoformat()}
         }
     else:
-        logger.error(f"Notification failed for package {package_id}: {result}")
-        return {
-            "status": "error",
-            "package_id": package_id,
-            "unit": unit,
-            "error": result.get('message')
-        }
+        return {"status": "error", "package_id": package_id, "unit": unit, "error": result.get('message')}
 
 
 # ============================================
@@ -404,8 +348,27 @@ class LaunchRequestHandler(AbstractRequestHandler):
 
     def handle(self, handler_input):
         user_id = handler_input.request_envelope.context.system.user.user_id
-        logger.info(f"User {user_id} launched the skill")
+        
+        print("\n========================================================")
+        print(f"🚀 LAUNCH ROUTE USER ID: {user_id}")
+        print("========================================================\n")
+        
         speak_output = "Welcome to Notiffi Alert. You can ask about your packages, locker access, or mailroom hours."
+        return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
+
+
+class FallbackIntentHandler(AbstractRequestHandler):
+    def can_handle(self, handler_input):
+        return ask_utils.is_intent_name("AMAZON.FallbackIntent")(handler_input)
+
+    def handle(self, handler_input):
+        user_id = handler_input.request_envelope.context.system.user.user_id
+        
+        print("\n========================================================")
+        print(f"🚀 INTERCEPTED FALLBACK ROUTE USER ID: {user_id}")
+        print("========================================================\n")
+        
+        speak_output = "I'm sorry, I didn't understand. You can ask about your packages, locker access, or mailroom hours."
         return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
 
 
@@ -457,26 +420,19 @@ class CancelAndStopIntentHandler(AbstractRequestHandler):
         return handler_input.response_builder.speak(speak_output).response
 
 
-class FallbackIntentHandler(AbstractRequestHandler):
-    def can_handle(self, handler_input):
-        return ask_utils.is_intent_name("AMAZON.FallbackIntent")(handler_input)
-
-    def handle(self, handler_input):
-        speak_output = "I'm sorry, I didn't understand. You can ask about your packages, locker access, or mailroom hours."
-        return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
-
-
 # ============================================
 # SKILL BUILDER
 # ============================================
 
 sb = SkillBuilder()
+
+# Order matters: Register explicit intents before global fallback handlers
 sb.add_request_handler(LaunchRequestHandler())
 sb.add_request_handler(PackageStatusIntentHandler())
 sb.add_request_handler(LockerAccessIntentHandler())
 sb.add_request_handler(MailroomHoursIntentHandler())
 sb.add_request_handler(HelpIntentHandler())
 sb.add_request_handler(CancelAndStopIntentHandler())
-sb.add_request_handler(FallbackIntentHandler())
+sb.add_request_handler(FallbackIntentHandler())  # Intercept routing safety valve placed cleanly at the end
 
 lambda_handler = sb.lambda_handler()
