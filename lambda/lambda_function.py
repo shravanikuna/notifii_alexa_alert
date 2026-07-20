@@ -13,7 +13,7 @@ from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_model import Response
 
 # ============================================
-# LOGGING CONFIGURATION
+# LOGGING
 # ============================================
 
 logger = logging.getLogger(__name__)
@@ -24,32 +24,23 @@ logger.setLevel(logging.INFO)
 # ============================================
 
 class Config:
-    """Configuration settings from environment variables"""
-    
-    # Alexa Skill Messaging (from Build > Permissions > Alexa Skill Messaging)
     ALEXA_CLIENT_ID = os.environ.get('ALEXA_CLIENT_ID', '')
     ALEXA_CLIENT_SECRET = os.environ.get('ALEXA_CLIENT_SECRET', '')
-    
-    # Proactive Events - Development or Production
     ALEXA_API_URL = os.environ.get('ALEXA_API_URL', 'https://api.amazonalexa.com/v1/proactiveEvents/stages/development')
 
 config = Config()
 
-
 # ============================================
-# ALEXA PROACTIVE EVENTS INTEGRATION
+# ALEXA PROACTIVE EVENTS CLIENT
 # ============================================
 
 class AlexaProactiveEventsClient:
-    """Client for sending proactive events to Alexa"""
-    
     def __init__(self):
         self.client_id = config.ALEXA_CLIENT_ID
         self.client_secret = config.ALEXA_CLIENT_SECRET
         self.api_url = config.ALEXA_API_URL
     
     def get_token(self) -> Optional[str]:
-        """Get access token for Proactive Events API"""
         token_url = "https://api.amazon.com/auth/o2/token"
         payload = {
             "grant_type": "client_credentials",
@@ -57,172 +48,125 @@ class AlexaProactiveEventsClient:
             "client_secret": self.client_secret,
             "scope": "alexa::proactive_events"
         }
-        
         try:
             response = requests.post(token_url, data=payload)
             if response.status_code == 200:
-                logger.info("✅ Successfully obtained proactive events token")
+                logger.info("✅ Token obtained")
                 return response.json().get("access_token")
             else:
-                logger.error(f"❌ Token request failed: {response.status_code} - {response.text}")
+                logger.error(f"❌ Token failed: {response.status_code}")
                 return None
         except Exception as e:
-            logger.error(f"Token request error: {str(e)}")
+            logger.error(f"Token error: {str(e)}")
             return None
     
-    def send_notification(self, alexa_user_id: str, seller_name: str, package_id: str) -> Dict:
-        """Send a proactive notification to a user"""
-        
+    def send_notification(self, alexa_user_id: str, carrier: str, package_id: str) -> Dict:
         token = self.get_token()
         if not token:
-            return {"status": "error", "message": "Failed to get access token"}
+            return {"status": "error", "message": "Failed to get token"}
         
-        # Clean ISO timestamps
-        now_clean = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-        expiry_clean = (datetime.utcnow() + timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        expiry = (datetime.utcnow() + timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%SZ")
         
         payload = {
-            "timestamp": now_clean,
+            "timestamp": now,
             "referenceId": f"notifii_{package_id}_{int(datetime.utcnow().timestamp())}",
-            "expiryTime": expiry_clean,
+            "expiryTime": expiry,
             "event": {
                 "name": "AMAZON.OrderStatus.Updated",
                 "payload": {
-                    "state": {
-                        "status": "ORDER_DELIVERED"
-                    },
-                    "order": {
-                        "seller": {
-                            "name": "localizedattribute:sellerName"
-                        }
-                    }
+                    "state": {"status": "ORDER_DELIVERED"},
+                    "order": {"seller": {"name": "localizedattribute:sellerName"}}
                 }
             },
-            "localizedAttributes": [
-                {
-                    "locale": "en-US",
-                    "sellerName": seller_name
-                }
-            ],
+            "localizedAttributes": [{"locale": "en-US", "sellerName": carrier}],
             "relevantAudience": {
                 "type": "Unicast",
-                "payload": {
-                    "user": alexa_user_id
-                }
+                "payload": {"user": alexa_user_id}
             }
         }
         
-        logger.info(f"🚀 Sending payload: {json.dumps(payload, indent=2)}")
-        
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json"
-        }
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
         
         try:
             response = requests.post(self.api_url, json=payload, headers=headers)
-            
             if response.status_code == 202:
-                logger.info(f"✅ Notification sent successfully to {alexa_user_id}")
+                logger.info(f"✅ Notification sent to {alexa_user_id}")
                 return {"status": "success", "code": 202}
             else:
-                logger.error(f"❌ Notification failed: {response.status_code} - {response.text}")
+                logger.error(f"❌ Failed: {response.status_code} - {response.text}")
                 return {"status": "error", "code": response.status_code, "message": response.text}
-                
         except Exception as e:
-            logger.error(f"Notification error: {str(e)}")
+            logger.error(f"Error: {str(e)}")
             return {"status": "error", "message": str(e)}
 
 alexa_client = AlexaProactiveEventsClient()
 
 
 # ============================================
-# WEBHOOK HANDLER (Entry Point for Package Events)
+# MOCK USER DATA (Replace with your real user ID)
 # ============================================
 
-# Mock user data for POC - In production, fetch from Notifii API
+REAL_ALEXA_USER_ID = "amzn1.ask.account.AMATMDKNUASAWAAP6FFPPX45QMIQ5CSAEQ5JGGFRBVCYJH3CTJZQMRTYLRFU3WTHNZTCCJVBX5KTVODQIQN4FRLVI5E6NULNLSK67CNDNHL63APNC4OFILHBK7FB2VQPIURI6SMOJP54KGJELJUKKZ7NGJKPGUUSQOJDUEMKFCDNFS4D45H2ZXE66ZMDRLTOW62DPQ7JXCN6BPBUMLRM4DTTDORSNEBFDUVF3SBL6R6Q"
+
 MOCK_USER_CONFIGS = {
-    "4B": {
-        "unit": "4B",
-        "user_id": "U123",
-        "opted_alexa": True,
-        "alexa_user_id": "amzn1.ask.account.AMATMDKNUASAWAAP6FFPPX45QMIQ5CSAEQ5JGGFRBVCYJH3CTJZQMRTYLRFU3WTHNZTCCJVBX5KTVODQIQN4FRLVI5E6NULNLSK67CNDNHL63APNC4OFILHBK7FB2VQPIURI6SMOJP54KGJELJUKKZ7NGJKPGUUSQOJDUEMKFCDNFS4D45H2ZXE66ZMDRLTOW62DPQ7JXCN6BPBUMLRM4DTTDORSNEBFDUVF3SBL6R6Q",
-        "name": "John Doe"
-    }
+    "4B": {"unit": "4B", "opted_alexa": True, "alexa_user_id": REAL_ALEXA_USER_ID},
+    "2A": {"unit": "2A", "opted_alexa": True, "alexa_user_id": REAL_ALEXA_USER_ID}
 }
 
 def get_user_configuration(unit: str) -> Optional[Dict]:
-    """Fetch user configuration - Replace with Notifii API in production"""
+    """Mock user config - In production, fetch from Notifii API"""
     return MOCK_USER_CONFIGS.get(unit)
 
+
+# ============================================
+# WEBHOOK HANDLER
+# ============================================
+
 def handle_package_event(event: Dict, context: Any) -> Dict:
-    """Main handler for package delivery events from Notifii"""
-    logger.info(f"📦 Received package event: {event}")
+    """Main handler - receives webhook from Notifii"""
+    logger.info(f"📦 Received: {event}")
     
     try:
-        package_data = event.get('data', {})
-        unit = package_data.get('unit')
-        package_id = package_data.get('package_id')
+        data = event.get('data', {})
+        unit = data.get('unit')
+        package_id = data.get('package_id')
+        carrier = data.get('carrier', 'courier')
         
         if not unit or not package_id:
-            logger.error("Missing required fields: unit or package_id")
-            return {"status": "error", "message": "Missing required fields"}
+            return {"status": "error", "message": "Missing unit or package_id"}
     
     except Exception as e:
-        logger.error(f"Error parsing webhook: {str(e)}")
         return {"status": "error", "message": str(e)}
     
-    # Fetch user configuration
+    # Get user config
     user_config = get_user_configuration(unit)
     if not user_config:
-        logger.error(f"User not found for unit: {unit}")
-        return {"status": "error", "message": "User not found"}
+        return {"status": "error", "message": f"User {unit} not found"}
     
-    # Check if user has opted into Alexa
     if not user_config.get('opted_alexa', False):
-        logger.info(f"User {unit} has not opted into Alexa notifications")
         return {"status": "skipped", "reason": "User not opted in"}
     
-    # Get Alexa user ID
     alexa_user_id = user_config.get('alexa_user_id')
     if not alexa_user_id:
-        logger.info(f"User {unit} has no Alexa ID linked")
         return {"status": "skipped", "reason": "No Alexa ID linked"}
     
-    # Get carrier name
-    carrier = package_data.get('carrier', 'courier')
-    
-    # Send proactive notification
-    result = alexa_client.send_notification(
-        alexa_user_id=alexa_user_id,
-        seller_name=carrier,
-        package_id=package_id
-    )
+    # Send notification
+    result = alexa_client.send_notification(alexa_user_id, carrier, package_id)
     
     if result.get('status') == 'success':
-        logger.info(f"✅ Notification sent successfully for package {package_id}")
         return {
             "status": "success",
             "package_id": package_id,
             "unit": unit,
-            "notification": {
-                "alexa_user_id": alexa_user_id,
-                "message": f"Your package from {carrier} has arrived.",
-                "sent_at": datetime.utcnow().isoformat()
-            }
+            "message": f"Notification sent for {carrier} package"
         }
     else:
-        logger.error(f"❌ Notification failed for package {package_id}: {result}")
-        return {
-            "status": "error",
-            "package_id": package_id,
-            "unit": unit,
-            "error": result.get('message')
-        }
+        return {"status": "error", "package_id": package_id, "error": result.get('message')}
 
 
 # ============================================
-# ALEXA SKILL INTENT HANDLERS (Voice Interaction)
+# ALEXA SKILL INTENT HANDLERS
 # ============================================
 
 class LaunchRequestHandler(AbstractRequestHandler):
@@ -232,10 +176,9 @@ class LaunchRequestHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         user_id = handler_input.request_envelope.context.system.user.user_id
         print("\n" + "=" * 60)
-        print(f"🚀 FOUND USER ID: {user_id}")
+        print(f"🚀 USER ID: {user_id}")
         print("=" * 60 + "\n")
-        
-        speak_output = "Welcome to Notifii Alert. You can ask about your packages, locker access, or mailroom hours."
+        speak_output = "Welcome to Notiffi Alert. You can ask about your packages, locker access, or mailroom hours."
         return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
 
 
@@ -273,7 +216,7 @@ class HelpIntentHandler(AbstractRequestHandler):
         return ask_utils.is_intent_name("AMAZON.HelpIntent")(handler_input)
 
     def handle(self, handler_input):
-        speak_output = "You can ask me about your packages, locker access, or mailroom hours. What would you like to know?"
+        speak_output = "You can ask me about your packages, locker access, or mailroom hours."
         return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
 
 
