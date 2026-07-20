@@ -1,48 +1,32 @@
 #!/usr/bin/env python3
 """
-Local webhook server for testing Notifii package events with AI Agent.
-Run this script locally to receive and process webhooks from Postman.
+Local webhook server for testing Notifii package events.
 """
 
 import json
 import logging
 import os
 import requests
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
 
-# Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
 # ============================================
-# CONFIGURATION - CONFIGURING REAL CREDENTIALS
+# CONFIGURATION
 # ============================================
 
-# 1. READ YOUR SKILL MESSAGING CREDENTIALS (FROM PERMISSIONS TAB)
-ALEXA_CLIENT_ID = os.environ.get('ALEXA_CLIENT_ID', 'YOUR_SKILL_MESSAGING_CLIENT_ID')
-ALEXA_CLIENT_SECRET = os.environ.get('ALEXA_CLIENT_SECRET', 'YOUR_SKILL_MESSAGING_CLIENT_SECRET')
+ALEXA_CLIENT_ID = os.environ.get('ALEXA_CLIENT_ID', 'YOUR_CLIENT_ID_HERE')
+ALEXA_CLIENT_SECRET = os.environ.get('ALEXA_CLIENT_SECRET', 'YOUR_CLIENT_SECRET_HERE')
 
-# 2. YOUR REAL ALEXA USER ID FROM DEVELOPMENT TEST TAB
-REAL_ALEXA_USER_ID = "amzn1.ask.account.AMAZ6TGJ7PKWQNAZGQABY75OS5I32SYPRXKUI6MHLA64YASSC5WK6ANOR3WKHF7SC2UR2SXOZIXUHCDLEXEK4LGTF6G6IDJYNLZ4GB3NSZYC7IEA5LLXWXVL7HB4NQTJ6HBMSN5FFOZHIK2M6UTN6VGRQFZPZVFJ4XDPM5ZJ53NGKU3VOEES2RVMSMLFIAKY4UCZNNUEQBDHU5GVVFTAHKW6YC3MTVG6QGUFZJA4KNIA"
+# ⚠️ REPLACE WITH YOUR REAL USER ID FROM TEST TAB
+REAL_ALEXA_USER_ID = "amzn1.ask.account.YOUR_USER_ID_HERE"
 
-MOCK_USER_CONFIGS = {
-    "4B": {
-        "unit": "4B",
-        "user_id": "U123",
-        "opted_alexa": True,
-        "alexa_user_id": REAL_ALEXA_USER_ID,  
-        "name": "John Doe",
-        "email": "john.doe@example.com",
-        "phone": "+1234567890"
-    }
-}
-
-# Helper function to get the OAuth Token safely with the exact Proactive Events scope
-def get_alexa_proactive_token():
-    logger.info("🔑 Requesting access token from Amazon OAuth server...")
+def get_alexa_token():
+    """Get OAuth token for Proactive Events"""
     url = "https://api.amazon.com/auth/o2/token"
     payload = {
         "grant_type": "client_credentials",
@@ -50,97 +34,67 @@ def get_alexa_proactive_token():
         "client_secret": ALEXA_CLIENT_SECRET,
         "scope": "alexa::proactive_events"
     }
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    response = requests.post(url, data=payload, headers=headers)
-    
+    response = requests.post(url, data=payload)
     if response.status_code != 200:
-        logger.error(f"❌ Token exchange failed: {response.status_code} - {response.text}")
-        raise Exception("Failed to get authenticated bearer token from LWA.")
-        
-    token = response.json().get("access_token")
-    logger.info("✅ Successfully generated access token!")
-    return token
+        raise Exception(f"Token failed: {response.text}")
+    return response.json().get("access_token")
 
-# Helper function to send the completely clean schema directly to the Sandbox/Development endpoint
-# Helper function to send the completely clean schema directly to the Sandbox/Development endpoint
-# Helper function to send the completely clean schema directly to the Sandbox/Development endpoint
-def send_proactive_notification(carrier_name, package_id):
-    token = get_alexa_proactive_token()
+def send_notification(carrier_name):
+    """Send proactive notification to Alexa"""
+    token = get_alexa_token()
     
-    # 🎯 FIX: Changed endpoint to Far East / India regional endpoint sandbox
+    # Use FE (Far East) endpoint for India/Asia
     url = "https://api.fe.amazonalexa.com/v1/proactiveEvents/stages/development"
     
-    # Clean ISO timestamps without milliseconds fractions
-    now_clean = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    expiry_clean = (datetime.now(timezone.utc) + timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    expiry = (datetime.utcnow() + timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%SZ")
     
-    # Strict Amazon Custom Event Schema Definition Contract
     payload = {
-        "timestamp": now_clean,
-        "referenceId": f"notifii{int(datetime.now().timestamp())}",  
-        "expiryTime": expiry_clean,
+        "timestamp": now,
+        "referenceId": f"notifii_{int(datetime.utcnow().timestamp())}",
+        "expiryTime": expiry,
         "event": {
             "name": "AMAZON.OrderStatus.Updated",
             "payload": {
-                "state": {
-                    "status": "ORDER_DELIVERED"
-                },
-                "order": {
-                    "seller": {
-                        "name": "localizedattribute:sellerName"
-                    }
-                }
+                "state": {"status": "ORDER_DELIVERED"},
+                "order": {"seller": {"name": "localizedattribute:sellerName"}}
             }
         },
-        "localizedAttributes": [
-            {
-                "locale": "en-US",
-                "sellerName": carrier_name
-            }
-        ],
+        "localizedAttributes": [{"locale": "en-US", "sellerName": carrier_name}],
         "relevantAudience": {
             "type": "Unicast",
-            "payload": {
-                "user": REAL_ALEXA_USER_ID  
-            }
+            "payload": {"user": REAL_ALEXA_USER_ID}
         }
     }
     
     headers = {
         "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json; charset=utf-8"
+        "Content-Type": "application/json"
     }
     
-    logger.info(f"🚀 Firing Proactive Event directly to sandbox:\n{json.dumps(payload, indent=2)}")
-    res = requests.post(url, json=payload, headers=headers)
-    logger.info(f"📬 Alexa Server Response: {res.status_code} - {res.text}")
-    return res.status_code, res.text
-# ============================================
-# MAIN WEBHOOK ENDPOINT
-# ============================================
+    response = requests.post(url, json=payload, headers=headers)
+    return response.status_code, response.text
 
 @app.route('/webhook/package-delivered', methods=['POST'])
 def webhook_package_delivered():
-    """Main webhook endpoint for package events from Notifii"""
     try:
         payload = request.get_json()
-        logger.info(f"Received webhook payload: {payload}")
+        logger.info(f"Received: {payload}")
         
         if not payload or 'data' not in payload:
-            return jsonify({"status": "error", "message": "Missing data block"}), 400
+            return jsonify({"status": "error", "message": "Missing data"}), 400
             
         data = payload['data']
         carrier = data.get('carrier', 'FedEx')
         package_id = data.get('package_id', 'PKG-12345')
         
-        # Fire our working notification engine directly
-        status_code, response_text = send_proactive_notification(carrier, package_id)
+        status_code, response_text = send_notification(carrier)
         
-        if status_code in [200, 202]:
+        if status_code == 202:
             return jsonify({
                 "status": "success",
                 "package_id": package_id,
-                "message": "Notification successfully queued on user device!"
+                "message": "Notification queued successfully!"
             }), 200
         else:
             return jsonify({
@@ -150,7 +104,7 @@ def webhook_package_delivered():
             }), 400
             
     except Exception as e:
-        logger.error(f"Error processing webhook: {str(e)}")
+        logger.error(f"Error: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/webhook/test', methods=['GET'])
