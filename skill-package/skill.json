@@ -32,22 +32,21 @@
         "name": "alexa::devices:all:notifications:write"
       }
     ],
-"events": {
-  "endpoint": {
-    "uri":
-    "arn:aws:lambda:us-east-1:107554921703:function:97fb82d9-ff6f-4f80-8339-27fe7a699f0d:Release_0"
-  },
-  "publications": [
-    {
-      "eventName": "AMAZON.OrderStatus.Updated"
-    }
-  ],
-  "subscriptions": [
-    {
-      "eventName": "SKILL_PROACTIVE_SUBSCRIPTION_CHANGED"
-    }
-  ]
-},
+    "events": {
+      "endpoint": {
+        "uri": "arn:aws:lambda:us-east-1:107554921703:function:97fb82d9-ff6f-4f80-8339-27fe7a699f0d:Release_0"
+      },
+      "publications": [
+        {
+          "eventName": "AMAZON.OrderStatus.Updated"
+        }
+      ],
+      "subscriptions": [
+        {
+          "eventName": "SKILL_PROACTIVE_SUBSCRIPTION_CHANGED"
+        }
+      ]
+    },
     "publishingInformation": {
       "automaticClonedLocale": {
         "locales": [
@@ -60,63 +59,82 @@
       "isAvailableWorldwide": true,
       "locales": {
         "en-US": {
-          "description": "Sample Full Description",
+          "description": "Receive package and locker alerts with Notiffi Alert.",
           "examplePhrases": [
-            "Alexa open hello world",
-            "hello",
-            "help"
+            "Alexa open Notiffi Alert",
+            "Alexa ask Notiffi Alert check my packages",
+            "Alexa ask Notiffi Alert for mailroom hours"
           ],
-          "keywords": [],
+          "keywords": [
+            "packages",
+            "delivery",
+            "mailroom"
+          ],
           "name": "Notiffi Alert",
-          "summary": "Sample Short Description"
+          "summary": "Smart delivery tracking for residents."
         },
         "en-CA": {
-          "description": "Sample Full Description",
+          "description": "Receive package and locker alerts with Notiffi Alert.",
           "examplePhrases": [
-            "Alexa open hello world",
-            "hello",
-            "help"
+            "Alexa open Notiffi Alert",
+            "Alexa ask Notiffi Alert check my packages",
+            "Alexa ask Notiffi Alert for mailroom hours"
           ],
-          "keywords": [],
+          "keywords": [
+            "packages",
+            "delivery",
+            "mailroom"
+          ],
           "name": "Notiffi Alert",
-          "summary": "Sample Short Description"
+          "summary": "Smart delivery tracking for residents."
         },
         "en-IN": {
-          "description": "Sample Full Description",
+          "description": "Receive package and locker alerts with Notiffi Alert.",
           "examplePhrases": [
-            "Alexa open hello world",
-            "hello",
-            "help"
+            "Alexa open Notiffi Alert",
+            "Alexa ask Notiffi Alert check my packages",
+            "Alexa ask Notiffi Alert for mailroom hours"
           ],
-          "keywords": [],
+          "keywords": [
+            "packages",
+            "delivery",
+            "mailroom"
+          ],
           "name": "Notiffi Alert",
-          "summary": "Sample Short Description"
+          "summary": "Smart delivery tracking for residents."
         },
         "en-AU": {
-          "description": "Sample Full Description",
+          "description": "Receive package and locker alerts with Notiffi Alert.",
           "examplePhrases": [
-            "Alexa open hello world",
-            "hello",
-            "help"
+            "Alexa open Notiffi Alert",
+            "Alexa ask Notiffi Alert check my packages",
+            "Alexa ask Notiffi Alert for mailroom hours"
           ],
-          "keywords": [],
+          "keywords": [
+            "packages",
+            "delivery",
+            "mailroom"
+          ],
           "name": "Notiffi Alert",
-          "summary": "Sample Short Description"
+          "summary": "Smart delivery tracking for residents."
         },
         "en-GB": {
-          "description": "Sample Full Description",
+          "description": "Receive package and locker alerts with Notiffi Alert.",
           "examplePhrases": [
-            "Alexa open hello world",
-            "hello",
-            "help"
+            "Alexa open Notiffi Alert",
+            "Alexa ask Notiffi Alert check my packages",
+            "Alexa ask Notiffi Alert for mailroom hours"
           ],
-          "keywords": [],
+          "keywords": [
+            "packages",
+            "delivery",
+            "mailroom"
+          ],
           "name": "Notiffi Alert",
-          "summary": "Sample Short Description"
+          "summary": "Smart delivery tracking for residents."
         }
       },
-      "testingInstructions": "Sample Testing Instructions."
+      "testingInstructions": "Test by opening the skill and requesting package status details."
     }
   }
 }
-

@@ -26,7 +26,7 @@ ALEXA_CLIENT_ID = os.environ.get('ALEXA_CLIENT_ID', 'YOUR_SKILL_MESSAGING_CLIENT
 ALEXA_CLIENT_SECRET = os.environ.get('ALEXA_CLIENT_SECRET', 'YOUR_SKILL_MESSAGING_CLIENT_SECRET')
 
 # 2. YOUR REAL ALEXA USER ID FROM DEVELOPMENT TEST TAB
-REAL_ALEXA_USER_ID = "amzn1.ask.account.AMAUHAHRXHZZR5MRPWPMBML6XKO7QLJEKDRQEHSZRTQCUW3W6PPR6X2MEHWP5MEP4BKXFQ5XQKUOFPQDM23EMWZY2G4CRNDOTIPCK3UKZOXOKJD47R63EQA3YOPT5NVLKBRU4FIDK7ZDK7S5LWLH6MNJTPENDSYTNEU42JVS77NR5I3NK2GSZEHLW5RP7K2TTYERYGJPOTVB6OVLVYPUNBHRAAOJQLKTHSLELZ2WS3NA"
+REAL_ALEXA_USER_ID = "amzn1.ask.account.AMAZ6TGJ7PKWQNAZGQABY75OS5I32SYPRXKUI6MHLA64YASSC5WK6ANOR3WKHF7SC2UR2SXOZIXUHCDLEXEK4LGTF6G6IDJYNLZ4GB3NSZYC7IEA5LLXWXVL7HB4NQTJ6HBMSN5FFOZHIK2M6UTN6VGRQFZPZVFJ4XDPM5ZJ53NGKU3VOEES2RVMSMLFIAKY4UCZNNUEQBDHU5GVVFTAHKW6YC3MTVG6QGUFZJA4KNIA"
 
 MOCK_USER_CONFIGS = {
     "4B": {
@@ -67,8 +67,8 @@ def get_alexa_proactive_token():
 def send_proactive_notification(carrier_name, package_id):
     token = get_alexa_proactive_token()
     
-    # FORCE DEVELOPMENT ENDPOINT ONLY
-    url = "https://api.amazonalexa.com/v1/proactiveEvents/stages/development"
+    # 🎯 FIX: Changed endpoint to Far East / India regional endpoint sandbox
+    url = "https://api.fe.amazonalexa.com/v1/proactiveEvents/stages/development"
     
     # Clean ISO timestamps without milliseconds fractions
     now_clean = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -77,7 +77,7 @@ def send_proactive_notification(carrier_name, package_id):
     # Strict Amazon Custom Event Schema Definition Contract
     payload = {
         "timestamp": now_clean,
-        "referenceId": f"notifii{int(datetime.now().timestamp())}",  # Purely alphanumeric tracking string
+        "referenceId": f"notifii{int(datetime.now().timestamp())}",  
         "expiryTime": expiry_clean,
         "event": {
             "name": "AMAZON.OrderStatus.Updated",
@@ -101,7 +101,7 @@ def send_proactive_notification(carrier_name, package_id):
         "relevantAudience": {
             "type": "Unicast",
             "payload": {
-                "user": REAL_ALEXA_USER_ID
+                "user": REAL_ALEXA_USER_ID  
             }
         }
     }

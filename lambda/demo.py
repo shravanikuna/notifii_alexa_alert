@@ -8,17 +8,17 @@ def send_test_webhook():
     
     url = "http://localhost:5000/webhook/package-delivered"
     
-    payload = {
-        "event": "package.delivered",
-        "data": {
-            "package_id": "PKG-DEMO-001",
-            "unit": "4B",
-            "carrier": "FedEx",
-            "tracking_number": "123456789",
-            "compartment": "B4",
-            "delivered_at": datetime.now().isoformat()
-        }
-    }
+    # payload = {
+    #     "event": "package.delivered",
+    #     "data": {
+    #         "package_id": "PKG-DEMO-001",
+    #         "unit": "4B",
+    #         "carrier": "FedEx",
+    #         "tracking_number": "123456789",
+    #         "compartment": "B4",
+    #         "delivered_at": datetime.now().isoformat()
+    #     }
+    # }
     
     response = requests.post(url, json=payload)
     print(f"Status: {response.status_code}")
