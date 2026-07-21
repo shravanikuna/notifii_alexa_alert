@@ -19,11 +19,10 @@ app = Flask(__name__)
 # CONFIGURATION
 # ============================================
 
-ALEXA_CLIENT_ID = os.environ.get('ALEXA_CLIENT_ID', 'YOUR_CLIENT_ID_HERE')
-ALEXA_CLIENT_SECRET = os.environ.get('ALEXA_CLIENT_SECRET', 'YOUR_CLIENT_SECRET_HERE')
+ALEXA_CLIENT_ID = os.environ.get('ALEXA_CLIENT_ID', '')
+ALEXA_CLIENT_SECRET = os.environ.get('ALEXA_CLIENT_SECRET', '')
 
-# ⚠️ REPLACE WITH YOUR REAL USER ID FROM TEST TAB
-REAL_ALEXA_USER_ID = "amzn1.ask.account.AMATMDKNUASAWAAP6FFPPX45QMIQ5CSAEQ5JGGFRBVCYJH3CTJZQMRTYLRFU3WTHNZTCCJVBX5KTVODQIQN4FRLVI5E6NULNLSK67CNDNHL63APNC4OFILHBK7FB2VQPIURI6SMOJP54KGJELJUKKZ7NGJKPGUUSQOJDUEMKFCDNFS4D45H2ZXE66ZMDRLTOW62DPQ7JXCN6BPBUMLRM4DTTDORSNEBFDUVF3SBL6R6Q"
+ALEXA_USER_ID = os.environ.get('ALEXA_USER_ID', '')
 
 def get_alexa_token():
     """Get OAuth token for Proactive Events"""
@@ -63,7 +62,7 @@ def send_notification(carrier_name):
         "localizedAttributes": [{"locale": "en-US", "sellerName": carrier_name}],
         "relevantAudience": {
             "type": "Unicast",
-            "payload": {"user": REAL_ALEXA_USER_ID}
+            "payload": {"user": ALEXA_USER_ID}
         }
     }
     

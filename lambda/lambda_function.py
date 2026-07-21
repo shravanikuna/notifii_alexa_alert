@@ -51,10 +51,10 @@ class AlexaProactiveEventsClient:
         try:
             response = requests.post(token_url, data=payload)
             if response.status_code == 200:
-                logger.info("✅ Token obtained")
+                logger.info("Token obtained")
                 return response.json().get("access_token")
             else:
-                logger.error(f"❌ Token failed: {response.status_code}")
+                logger.error(f"Token failed: {response.status_code}")
                 return None
         except Exception as e:
             logger.error(f"Token error: {str(e)}")
@@ -91,10 +91,10 @@ class AlexaProactiveEventsClient:
         try:
             response = requests.post(self.api_url, json=payload, headers=headers)
             if response.status_code == 202:
-                logger.info(f"✅ Notification sent to {alexa_user_id}")
+                logger.info(f"Notification sent to {alexa_user_id}")
                 return {"status": "success", "code": 202}
             else:
-                logger.error(f"❌ Failed: {response.status_code} - {response.text}")
+                logger.error(f"Failed: {response.status_code} - {response.text}")
                 return {"status": "error", "code": response.status_code, "message": response.text}
         except Exception as e:
             logger.error(f"Error: {str(e)}")
@@ -107,11 +107,11 @@ alexa_client = AlexaProactiveEventsClient()
 # MOCK USER DATA (Replace with your real user ID)
 # ============================================
 
-REAL_ALEXA_USER_ID = "amzn1.ask.account.AMATMDKNUASAWAAP6FFPPX45QMIQ5CSAEQ5JGGFRBVCYJH3CTJZQMRTYLRFU3WTHNZTCCJVBX5KTVODQIQN4FRLVI5E6NULNLSK67CNDNHL63APNC4OFILHBK7FB2VQPIURI6SMOJP54KGJELJUKKZ7NGJKPGUUSQOJDUEMKFCDNFS4D45H2ZXE66ZMDRLTOW62DPQ7JXCN6BPBUMLRM4DTTDORSNEBFDUVF3SBL6R6Q"
+ALEXA_USER_ID = os.environ.get('ALEXA_USER_ID', '')
 
 MOCK_USER_CONFIGS = {
-    "4B": {"unit": "4B", "opted_alexa": True, "alexa_user_id": REAL_ALEXA_USER_ID},
-    "2A": {"unit": "2A", "opted_alexa": True, "alexa_user_id": REAL_ALEXA_USER_ID}
+    "4B": {"unit": "4B", "opted_alexa": True, "alexa_user_id": ALEXA_USER_ID},
+    "2A": {"unit": "2A", "opted_alexa": True, "alexa_user_id": ALEXA_USER_ID}
 }
 
 def get_user_configuration(unit: str) -> Optional[Dict]:
