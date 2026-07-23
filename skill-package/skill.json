@@ -1,32 +1,15 @@
 {
   "manifest": {
+    "manifestVersion": "1.0",
     "apis": {
       "custom": {
         "endpoint": {
-          "uri": "arn:aws:lambda:us-east-1:107554921703:function:97fb82d9-ff6f-4f80-8339-27fe7a699f0d:Release_0"
+          "uri": "https://notifii-alexa-alert-2.onrender.com/alexa"
         },
         "interfaces": [],
-        "locales": {},
-        "regions": {
-          "EU": {
-            "endpoint": {
-              "uri": "arn:aws:lambda:eu-west-1:107554921703:function:97fb82d9-ff6f-4f80-8339-27fe7a699f0d:Release_0"
-            }
-          },
-          "NA": {
-            "endpoint": {
-              "uri": "arn:aws:lambda:us-east-1:107554921703:function:97fb82d9-ff6f-4f80-8339-27fe7a699f0d:Release_0"
-            }
-          },
-          "FE": {
-            "endpoint": {
-              "uri": "arn:aws:lambda:us-west-2:107554921703:function:97fb82d9-ff6f-4f80-8339-27fe7a699f0d:Release_0"
-            }
-          }
-        }
+        "locales": {}
       }
     },
-    "manifestVersion": "1.0",
     "permissions": [
       {
         "name": "alexa::devices:all:notifications:write"
@@ -34,97 +17,22 @@
     ],
     "events": {
       "endpoint": {
-        "uri": "arn:aws:lambda:us-east-1:107554921703:function:97fb82d9-ff6f-4f80-8339-27fe7a699f0d:Release_0"
+        "uri": "https://notifii-alexa-alert-2.onrender.com/alexa"
       },
-      "publications": [
-        {
-          "eventName": "AMAZON.OrderStatus.Updated"
-        }
-      ],
       "subscriptions": [
         {
           "eventName": "SKILL_PROACTIVE_SUBSCRIPTION_CHANGED"
         }
+      ],
+      "publications": [
+        {
+          "eventName": "AMAZON.OrderStatus.Updated"
+        }
       ]
     },
     "publishingInformation": {
-      "locales": {
-        "en-US": {
-          "description": "Receive package and locker alerts with Notiffi Alert.",
-          "examplePhrases": [
-            "Alexa open Notiffi Alert",
-            "Alexa ask Notiffi Alert check my packages",
-            "Alexa ask Notiffi Alert for mailroom hours"
-          ],
-          "keywords": [
-            "packages",
-            "delivery",
-            "mailroom"
-          ],
-          "name": "Notiffi Alert",
-          "summary": "Smart delivery tracking for residents."
-        },
-        "en-CA": {
-          "description": "Receive package and locker alerts with Notiffi Alert.",
-          "examplePhrases": [
-            "Alexa open Notiffi Alert",
-            "Alexa ask Notiffi Alert check my packages",
-            "Alexa ask Notiffi Alert for mailroom hours"
-          ],
-          "keywords": [
-            "packages",
-            "delivery",
-            "mailroom"
-          ],
-          "name": "Notiffi Alert",
-          "summary": "Smart delivery tracking for residents."
-        },
-        "en-IN": {
-          "description": "Receive package and locker alerts with Notiffi Alert.",
-          "examplePhrases": [
-            "Alexa open Notiffi Alert",
-            "Alexa ask Notiffi Alert check my packages",
-            "Alexa ask Notiffi Alert for mailroom hours"
-          ],
-          "keywords": [
-            "packages",
-            "delivery",
-            "mailroom"
-          ],
-          "name": "Notiffi Alert",
-          "summary": "Smart delivery tracking for residents."
-        },
-        "en-AU": {
-          "description": "Receive package and locker alerts with Notiffi Alert.",
-          "examplePhrases": [
-            "Alexa open Notiffi Alert",
-            "Alexa ask Notiffi Alert check my packages",
-            "Alexa ask Notiffi Alert for mailroom hours"
-          ],
-          "keywords": [
-            "packages",
-            "delivery",
-            "mailroom"
-          ],
-          "name": "Notiffi Alert",
-          "summary": "Smart delivery tracking for residents."
-        },
-        "en-GB": {
-          "description": "Receive package and locker alerts with Notiffi Alert.",
-          "examplePhrases": [
-            "Alexa open Notiffi Alert",
-            "Alexa ask Notiffi Alert check my packages",
-            "Alexa ask Notiffi Alert for mailroom hours"
-          ],
-          "keywords": [
-            "packages",
-            "delivery",
-            "mailroom"
-          ],
-          "name": "Notiffi Alert",
-          "summary": "Smart delivery tracking for residents."
-        }
-      },
+      "isAvailableWorldwide": true,
+      "distributionCountries": [],
       "automaticClonedLocale": {
         "locales": [
           {
@@ -132,9 +40,84 @@
           }
         ]
       },
-      "distributionCountries": [],
-      "isAvailableWorldwide": true,
-      "testingInstructions": "Test by opening the skill and requesting package status details."
+      "locales": {
+        "en-US": {
+          "name": "Notiffi Alert",
+          "summary": "Smart delivery tracking for residents.",
+          "description": "Receive package and locker alerts with Notiffi Alert.",
+          "examplePhrases": [
+            "Alexa, open Notiffi Alert",
+            "Alexa, ask Notiffi Alert for my packages",
+            "Alexa, ask Notiffi Alert for mailroom hours"
+          ],
+          "keywords": [
+            "packages",
+            "delivery",
+            "mailroom"
+          ]
+        },
+        "en-IN": {
+          "name": "Notiffi Alert",
+          "summary": "Smart delivery tracking for residents.",
+          "description": "Receive package and locker alerts with Notiffi Alert.",
+          "examplePhrases": [
+            "Alexa, open Notiffi Alert",
+            "Alexa, ask Notiffi Alert for my packages",
+            "Alexa, ask Notiffi Alert for mailroom hours"
+          ],
+          "keywords": [
+            "packages",
+            "delivery",
+            "mailroom"
+          ]
+        },
+        "en-GB": {
+          "name": "Notiffi Alert",
+          "summary": "Smart delivery tracking for residents.",
+          "description": "Receive package and locker alerts with Notiffi Alert.",
+          "examplePhrases": [
+            "Alexa, open Notiffi Alert",
+            "Alexa, ask Notiffi Alert for my packages",
+            "Alexa, ask Notiffi Alert for mailroom hours"
+          ],
+          "keywords": [
+            "packages",
+            "delivery",
+            "mailroom"
+          ]
+        },
+        "en-CA": {
+          "name": "Notiffi Alert",
+          "summary": "Smart delivery tracking for residents.",
+          "description": "Receive package and locker alerts with Notiffi Alert.",
+          "examplePhrases": [
+            "Alexa, open Notiffi Alert",
+            "Alexa, ask Notiffi Alert for my packages",
+            "Alexa, ask Notiffi Alert for mailroom hours"
+          ],
+          "keywords": [
+            "packages",
+            "delivery",
+            "mailroom"
+          ]
+        },
+        "en-AU": {
+          "name": "Notiffi Alert",
+          "summary": "Smart delivery tracking for residents.",
+          "description": "Receive package and locker alerts with Notiffi Alert.",
+          "examplePhrases": [
+            "Alexa, open Notiffi Alert",
+            "Alexa, ask Notiffi Alert for my packages",
+            "Alexa, ask Notiffi Alert for mailroom hours"
+          ],
+          "keywords": [
+            "packages",
+            "delivery",
+            "mailroom"
+          ]
+        }
+      },
+      "testingInstructions": "Open the skill, enable notifications, then POST a webhook to /webhook/package-delivered."
     }
   }
 }
