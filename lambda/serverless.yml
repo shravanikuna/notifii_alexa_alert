@@ -1,0 +1,37 @@
+service: notifii-alexa-alert
+
+frameworkVersion: "3"
+
+provider:
+  name: aws
+  runtime: python3.12
+  region: us-east-1
+  stage: dev
+  timeout: 30
+  memorySize: 512
+
+  environment:
+    ALEXA_CLIENT_ID: ${env:ALEXA_CLIENT_ID}
+    ALEXA_CLIENT_SECRET: ${env:ALEXA_CLIENT_SECRET}
+    ALEXA_USER_ID: ${env:ALEXA_USER_ID}
+
+plugins:
+  - serverless-wsgi
+
+custom:
+  wsgi:
+    app: app.app
+
+functions:
+  api:
+    handler: wsgi_handler.handler
+    events:
+      - httpApi: "*"
+
+package:
+  patterns:
+    - "!node_modules/**"
+    - "!venv/**"
+    - "!.venv/**"
+    - "!__pycache__/**"
+    - "!*.pyc"

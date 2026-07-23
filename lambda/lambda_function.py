@@ -50,12 +50,16 @@ class AlexaProactiveEventsClient:
         }
         try:
             response = requests.post(token_url, data=payload)
+
+            logger.info(f"Token obtained: {response.status_code}")
+            logger.info(f"Token response: {response.json()},response.text: {response.text} ")
             if response.status_code == 200:
-                logger.info("Token obtained")
-                return response.json().get("access_token")
-            else:
-                logger.error(f"Token failed: {response.status_code}")
-                return None
+                return response.json()["access_token"]
+
+            logger.error(
+    f"Token failed: {response.status_code} - {response.text}"
+)
+            return None
         except Exception as e:
             logger.error(f"Token error: {str(e)}")
             return None

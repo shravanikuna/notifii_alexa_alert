@@ -4,7 +4,7 @@
     "apis": {
       "custom": {
         "endpoint": {
-          "uri": "https://notifii-alexa-alert-2.onrender.com/alexa"
+          "uri": "https://notifiialexaalert-production.up.railway.app/alexa"
         },
         "interfaces": [],
         "locales": {}
@@ -17,7 +17,7 @@
     ],
     "events": {
       "endpoint": {
-        "uri": "https://notifii-alexa-alert-2.onrender.com/alexa"
+        "uri": "https://notifiialexaalert-production.up.railway.app/alexa"
       },
       "subscriptions": [
         {
