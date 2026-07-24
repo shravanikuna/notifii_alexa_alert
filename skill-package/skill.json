@@ -6,13 +6,15 @@
         "endpoint": {
           "uri": "https://notifiialexaalert-production.up.railway.app/alexa"
         },
-        "interfaces": [],
-        "locales": {}
+        "interfaces": []
       }
     },
     "permissions": [
       {
         "name": "alexa::devices:all:notifications:write"
+      },
+      {
+        "name": "alexa::async:proactive:events"
       }
     ],
     "events": {
@@ -21,7 +23,13 @@
       },
       "subscriptions": [
         {
-          "eventName": "SKILL_PROACTIVE_SUBSCRIPTION_CHANGED"
+          "eventName": "AlexaSkillEvent.ProactiveSubscriptionChanged"
+        },
+        {
+          "eventName": "AlexaSkillEvent.SkillPermissionChanged"
+        },
+        {
+          "eventName": "AlexaSkillEvent.SkillDisabled"
         }
       ],
       "publications": [
@@ -117,7 +125,7 @@
           ]
         }
       },
-      "testingInstructions": "Open the skill, enable notifications, then POST a webhook to /webhook/package-delivered."
+      "testingInstructions": "Open the skill, enable notifications in Alexa App, then POST a webhook to /webhook/package-delivered."
     }
   }
 }
