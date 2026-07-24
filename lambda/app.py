@@ -23,7 +23,8 @@ else:
 app.logger.info(f"ALEXA_USER_ID at startup = {os.getenv('ALEXA_USER_ID')}")
 
 # Alexa skill endpoint (handles LaunchRequest, intents, skill events)
-skill_adapter = SkillAdapter(skill=sb.create(), skill_id=None, app=app)
+# skill_adapter = SkillAdapter(skill=sb.create(), skill_id=None, app=app)
+skill_adapter = SkillAdapter(skill=sb.create(),skill_id=os.getenv("SKILL_ID"),app=app)
 skill_adapter.register(app=app, route="/alexa")
 
 # Notifii package webhook
