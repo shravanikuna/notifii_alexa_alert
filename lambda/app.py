@@ -11,7 +11,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-logger.info("ALEXA_USER_ID =", os.getenv("ALEXA_USER_ID"))
+# print("ALEXA_USER_ID =", os.getenv("ALEXA_USER_ID"))
+logger.info(f"ALEXA_USER_ID = {os.getenv('ALEXA_USER_ID')}")
 
 # Alexa skill endpoint (handles LaunchRequest, intents, skill events)
 skill_adapter = SkillAdapter(skill=sb.create(), skill_id=None, app=app)
