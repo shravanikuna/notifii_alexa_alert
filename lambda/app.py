@@ -18,9 +18,9 @@ if __name__ != "__main__":
     logger.setLevel(gunicorn_logger.level)
 else:
     logging.basicConfig(level=logging.INFO)
-    
+
 # print("ALEXA_USER_ID =", os.getenv("ALEXA_USER_ID"))
-logger.info(f"ALEXA_USER_ID = {os.getenv('ALEXA_USER_ID')}")
+app.logger.info(f"ALEXA_USER_ID at startup = {os.getenv('ALEXA_USER_ID')}")
 
 # Alexa skill endpoint (handles LaunchRequest, intents, skill events)
 skill_adapter = SkillAdapter(skill=sb.create(), skill_id=None, app=app)
