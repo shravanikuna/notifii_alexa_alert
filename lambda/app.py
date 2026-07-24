@@ -11,6 +11,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+
+if __name__ != "__main__":
+    gunicorn_logger = logging.getLogger('gunicorn.error')
+    logger.handlers = gunicorn_logger.handlers
+    logger.setLevel(gunicorn_logger.level)
+else:
+    logging.basicConfig(level=logging.INFO)
+    
 # print("ALEXA_USER_ID =", os.getenv("ALEXA_USER_ID"))
 logger.info(f"ALEXA_USER_ID = {os.getenv('ALEXA_USER_ID')}")
 
