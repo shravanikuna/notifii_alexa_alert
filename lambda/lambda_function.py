@@ -39,8 +39,14 @@ class AlexaProactiveEventsClient:
         self.client_id = config.ALEXA_CLIENT_ID
         self.client_secret = config.ALEXA_CLIENT_SECRET
         self.api_url = config.ALEXA_API_URL
-    
+        self._cached_token = None
+        self._token_expires_at = datetime.utcnow()
+
     def get_token(self) -> Optional[str]:
+        # Return cached token if valid for at least 5 more minutes
+        if self._cached_token and datetime.utcnow() < self._token_expires_at:
+            return self._cached_token
+
         token_url = "https://api.amazon.com/auth/o2/token"
         payload = {
             "grant_type": "client_credentials",
@@ -49,60 +55,17 @@ class AlexaProactiveEventsClient:
             "scope": "alexa::proactive_events"
         }
         try:
-            response = requests.post(token_url, data=payload)
-
-            logger.info(f"Token obtained: {response.status_code}")
-            logger.info(f"Token response: {response.json()},response.text: {response.text} ")
+            response = requests.post(token_url, data=payload, timeout=5)
             if response.status_code == 200:
-                return response.json()["access_token"]
-
-            logger.error(
-    f"Token failed: {response.status_code} - {response.text}"
-)
+                data = response.json()
+                self._cached_token = data["access_token"]
+                # Cache for 55 minutes
+                self._token_expires_at = datetime.utcnow() + timedelta(seconds=data.get("expires_in", 3600) - 300)
+                return self._cached_token
             return None
         except Exception as e:
-            logger.error(f"Token error: {str(e)}")
+            logger.error(f"Token fetch error: {str(e)}")
             return None
-    
-    def send_notification(self, alexa_user_id: str, carrier: str, package_id: str) -> Dict:
-        token = self.get_token()
-        if not token:
-            return {"status": "error", "message": "Failed to get token"}
-        
-        now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-        expiry = (datetime.utcnow() + timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        
-        payload = {
-            "timestamp": now,
-            "referenceId": f"notifii_{package_id}_{int(datetime.utcnow().timestamp())}",
-            "expiryTime": expiry,
-            "event": {
-                "name": "AMAZON.OrderStatus.Updated",
-                "payload": {
-                    "state": {"status": "ORDER_DELIVERED"},
-                    "order": {"seller": {"name": "localizedattribute:sellerName"}}
-                }
-            },
-            "localizedAttributes": [{"locale": "en-US", "sellerName": carrier}],
-            "relevantAudience": {
-                "type": "Unicast",
-                "payload": {"user": alexa_user_id}
-            }
-        }
-        
-        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-        
-        try:
-            response = requests.post(self.api_url, json=payload, headers=headers)
-            if response.status_code == 202:
-                logger.info(f"Notification sent to {alexa_user_id}")
-                return {"status": "success", "code": 202}
-            else:
-                logger.error(f"Failed: {response.status_code} - {response.text}")
-                return {"status": "error", "code": response.status_code, "message": response.text}
-        except Exception as e:
-            logger.error(f"Error: {str(e)}")
-            return {"status": "error", "message": str(e)}
 
 alexa_client = AlexaProactiveEventsClient()
 
@@ -192,12 +155,16 @@ class LaunchRequestHandler(AbstractRequestHandler):
 
     def handle(self, handler_input):
         user_id = handler_input.request_envelope.context.system.user.user_id
-        print("\n" + "=" * 60)
-        print(f"🚀 USER ID: {user_id}")
-        print("=" * 60 + "\n")
-        speak_output = "Welcome to Notiffi Alert. You can ask about your packages, locker access, or mailroom hours."
-        return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
-
+        
+        # Log or dynamically store in DB (e.g. update user unit mapping)
+        logger.info(f"Updated Alexa User ID: {user_id}")
+        
+        # Example: Update global/DB mapping automatically
+        global ALEXA_USER_ID
+        ALEXA_USER_ID = user_id
+        
+        speak_output = "Welcome to Notifii Alert. Your account is connected for package updates."
+        return handler_input.responseBuilder.speak(speak_output).getResponse()
 
 class PackageStatusIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
@@ -261,6 +228,7 @@ class FallbackIntentHandler(AbstractRequestHandler):
 # ============================================
 
 sb = SkillBuilder()
+sb.add_request_handler(ProactiveSubscriptionChangedHandler())
 sb.add_request_handler(LaunchRequestHandler())
 sb.add_request_handler(PackageStatusIntentHandler())
 sb.add_request_handler(LockerAccessIntentHandler())
