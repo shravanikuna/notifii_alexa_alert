@@ -49,7 +49,7 @@
         ]
       },
       "locales": {
-        "en-US": {
+        "en-IN": {
           "name": "Notiffi Alert",
           "summary": "Smart delivery tracking for residents.",
           "description": "Receive package and locker alerts with Notiffi Alert.",
@@ -64,7 +64,7 @@
             "mailroom"
           ]
         },
-        "en-IN": {
+        "en-US": {
           "name": "Notiffi Alert",
           "summary": "Smart delivery tracking for residents.",
           "description": "Receive package and locker alerts with Notiffi Alert.",

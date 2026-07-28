@@ -312,12 +312,43 @@ class CatchAllExceptionHandler(AbstractExceptionHandler):
             .response
         )
 
+class SkillPermissionChangedHandler(AbstractRequestHandler):
 
+    def can_handle(self, handler_input):
+        return ask_utils.is_request_type(
+            "AlexaSkillEvent.SkillPermissionChanged"
+        )(handler_input)
+
+    def handle(self, handler_input):
+        logger.info("Permission Changed")
+        logger.info(json.dumps(
+            handler_input.request_envelope.to_dict(),
+            indent=2
+        ))
+        return handler_input.response_builder.response
+
+class SkillDisabledHandler(AbstractRequestHandler):
+
+    def can_handle(self, handler_input):
+        return ask_utils.is_request_type(
+            "AlexaSkillEvent.SkillDisabled"
+        )(handler_input)
+
+    def handle(self, handler_input):
+        logger.info("Skill Disabled")
+        logger.info(json.dumps(
+            handler_input.request_envelope.to_dict(),
+            indent=2
+        ))
+        return handler_input.response_builder.response
+    
 # ============================================
 # SKILL BUILDER REGISTRATION
 # ============================================
 
 sb = SkillBuilder()
+sb.add_request_handler(SkillPermissionChangedHandler())
+sb.add_request_handler(SkillDisabledHandler())
 sb.add_request_handler(ProactiveSubscriptionChangedHandler())
 sb.add_request_handler(LaunchRequestHandler())
 sb.add_request_handler(PackageStatusIntentHandler())
