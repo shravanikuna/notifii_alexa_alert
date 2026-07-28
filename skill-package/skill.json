@@ -21,6 +21,11 @@
       "endpoint": {
         "uri": "https://notifii-alexa-alert-2.onrender.com/alexa"
       },
+      "publications": [
+        {
+          "eventName": "AMAZON.OrderStatus.Updated"
+        }
+      ],
       "subscriptions": [
         {
           "eventName": "AlexaSkillEvent.ProactiveSubscriptionChanged"
@@ -31,11 +36,6 @@
         {
           "eventName": "AlexaSkillEvent.SkillDisabled"
         }
-      ],
-      "publications": [
-        {
-          "eventName": "AMAZON.OrderStatus.Updated"
-        }
       ]
     },
     "publishingInformation": {
@@ -44,7 +44,7 @@
       "automaticClonedLocale": {
         "locales": [
           {
-            "source": "en-US"
+            "source": "en-IN"
           }
         ]
       },
