@@ -98,7 +98,7 @@ class AlexaProactiveEventsClient:
             },
             "localizedAttributes": [
                 {
-                    "locale": "en-IN",
+                    "locale": "en-US",
                     "sellerName": carrier
                 }
             ],
