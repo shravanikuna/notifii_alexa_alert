@@ -4,7 +4,7 @@
     "apis": {
       "custom": {
         "endpoint": {
-          "uri": "https://notifii-alexa-alert-2.onrender.com/alexa"
+          "uri": "https://microtroniks.com/alexa"
         },
         "interfaces": []
       }
@@ -16,7 +16,7 @@
     ],
     "events": {
       "endpoint": {
-        "uri": "https://notifii-alexa-alert-2.onrender.com/alexa",
+        "uri": "https://microtroniks.com/alexa",
         "sslCertificateType": "Trusted"
       },
       "publications": [
