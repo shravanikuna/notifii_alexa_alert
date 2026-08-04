@@ -24,9 +24,12 @@ logger.setLevel(logging.INFO)
 # ============================================
 
 class Config:
-    ALEXA_CLIENT_ID = os.environ.get('ALEXA_CLIENT_ID', '')
-    ALEXA_CLIENT_SECRET = os.environ.get('ALEXA_CLIENT_SECRET', '')
-    ALEXA_API_URL = os.environ.get('ALEXA_API_URL', 'https://api.eu.amazonalexa.com/v1/proactiveEvents/stages/development')
+    # ALEXA_CLIENT_ID = os.environ.get('ALEXA_CLIENT_ID', '')
+    # ALEXA_CLIENT_SECRET = os.environ.get('ALEXA_CLIENT_SECRET', '')
+    ALEXA_CLIENT_ID = os.environ.get('ALEXA_CLIENT_ID', '').strip()
+    ALEXA_CLIENT_SECRET = os.environ.get('ALEXA_CLIENT_SECRET', '').strip()
+    ALEXA_API_URL = os.environ.get('ALEXA_API_URL', '').strip()
+    # ALEXA_API_URL = os.environ.get('ALEXA_API_URL', 'https://api.eu.amazonalexa.com/v1/proactiveEvents/stages/development')
 
 config = Config()
 
@@ -135,11 +138,12 @@ alexa_client = AlexaProactiveEventsClient()
 # ============================================
 
 # Global state tracker for development/testing
-LATEST_ALEXA_USER_ID = os.environ.get('ALEXA_USER_ID', '')
+LATEST_ALEXA_USER_ID = os.environ.get('ALEXA_USER_ID', '').strip()
 
 def get_user_configuration(unit: str) -> Optional[Dict]:
     """Fetch user configuration. Uses LATEST_ALEXA_USER_ID updated dynamically at launch."""
-    active_user_id = LATEST_ALEXA_USER_ID or os.environ.get('ALEXA_USER_ID', '')
+    # active_user_id = LATEST_ALEXA_USER_ID or os.environ.get('ALEXA_USER_ID', '')
+    active_user_id = os.environ.get('ALEXA_USER_ID', '').strip()
     
     configs = {
         "4B": {"unit": "4B", "opted_alexa": True, "alexa_user_id": active_user_id},
@@ -180,6 +184,8 @@ def handle_package_event(event: Dict, context: Any) -> Dict:
 
     if not alexa_user_id:
         return {"status": "skipped", "reason": "No Alexa User ID linked", "debug": debug_info}
+    
+    logger.info(f"RAW USERID REPR: {repr(alexa_user_id)}")
 
     result = alexa_client.send_notification(alexa_user_id, carrier, package_id)
 
