@@ -26,7 +26,7 @@ logger.setLevel(logging.INFO)
 class Config:
     ALEXA_CLIENT_ID = os.environ.get('ALEXA_CLIENT_ID', '')
     ALEXA_CLIENT_SECRET = os.environ.get('ALEXA_CLIENT_SECRET', '')
-    ALEXA_API_URL = os.environ.get('ALEXA_API_URL', 'https://api.amazonalexa.com/v1/proactiveEvents/stages/development')
+    ALEXA_API_URL = os.environ.get('ALEXA_API_URL', 'https://api.eu.amazonalexa.com/v1/proactiveEvents/stages/development')
 
 config = Config()
 
