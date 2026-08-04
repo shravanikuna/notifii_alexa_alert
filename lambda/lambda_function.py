@@ -118,12 +118,13 @@ class AlexaProactiveEventsClient:
             "Content-Type": "application/json"
         }
         logger.info(f"OUTGOING PAYLOAD: {json.dumps(payload)}")
-        logger.info(f"Amazon Request ID: {response.headers.get('x-amzn-requestid')}")
         try:
             response = requests.post(self.api_url, json=payload, headers=headers, timeout=10)
             if response.status_code == 202:
                 logger.info(f"Notification successfully sent to {alexa_user_id}")
+                logger.info(f"Amazon Request ID: {response.headers.get('x-amzn-requestid')}")
                 return {"status": "success", "code": 202}
+
             else:
                 logger.error(f"Proactive Events API error: {response.status_code} - {response.text}")
                 return {"status": "error", "code": response.status_code, "message": response.text}
