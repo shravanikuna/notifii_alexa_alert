@@ -84,7 +84,7 @@ class AlexaProactiveEventsClient:
         # Correct schema payload for AMAZON.OrderStatus.Updated
         payload = {
             "timestamp": now,
-            "referenceId": f"notifii_{package_id}_{int(datetime.utcnow().timestamp())}",
+            "referenceId": f"notifii.{package_id}.{int(datetime.utcnow().timestamp())}",
             "expiryTime": expiry,
             "event": {
                 "name": "AMAZON.OrderStatus.Updated",
@@ -117,7 +117,7 @@ class AlexaProactiveEventsClient:
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json"
         }
-
+        logger.info(f"OUTGOING PAYLOAD: {json.dumps(payload)}")
         try:
             response = requests.post(self.api_url, json=payload, headers=headers, timeout=10)
             if response.status_code == 202:

@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-08-04T05:16:46Z",
+  "referenceId": "eutest.1785820606",
+  "expiryTime": "2026-08-04T17:16:46Z",
+  "event": {
+    "name": "AMAZON.OrderStatus.Updated",
+    "payload": {
+      "state": { "status": "ORDER_DELIVERED" },
+      "order": { "seller": { "name": "localizedattribute:sellerName" } }
+    }
+  },
+  "localizedAttributes": [{ "locale": "en-US", "sellerName": "FedEx" }],
+  "relevantAudience": {
+    "type": "Unicast",
+    "payload": { "user": "amzn1.ask.account.AMAWVJEKBBLU2S6LGZO6EJJVKBFBQ6LAF7K7ZR6ERNCHBKNIRYZZNY7WM46LTZVJLUSTP22CIAA7XYMMO43LS4HMDARFADTR26YH2HJREMRKAOXWDFP52WXJ5CKHE3UJWASN4F2J3EURPV65UNIOOBEN7NNJT5HHC5DIFSIUMEFOL64AW4L6ITWIM6SU5JELMNQNYZ7EFZL7AOKVTB6WXHFKQWRIBE66FCQOSS65QXLA" }
+  }
+}
