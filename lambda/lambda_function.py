@@ -185,6 +185,7 @@ def handle_package_event(event: Dict, context: Any) -> Dict:
         "compartment": data.get("compartment"),
         "package_size": data.get("package_size"),
         "signature_required": data.get("signature_required"),
+        "delivered_at": data.get("delivered_at")
     })
 
     debug_info = {
@@ -271,7 +272,8 @@ class PackageStatusIntentHandler(AbstractRequestHandler):
             speak_output = "You have no packages right now."
         else:
             parts = [f"one from {p['carrier']}" for p in packages]
-            speak_output = f"You have {len(packages)} packages: {', '.join(parts)}."
+            # speak_output = f"You have {len(packages)} packages: {', '.join(parts)}."
+            speak_output = generate_package_summary(packages) 
         return handler_input.response_builder.speak(speak_output).response
 
 # class LockerAccessIntentHandler(AbstractRequestHandler):
@@ -283,7 +285,7 @@ class PackageStatusIntentHandler(AbstractRequestHandler):
 #         return handler_input.response_builder.speak(speak_output).response
 
 class LockerAccessIntentHandler(AbstractRequestHandler):
-    def can_handle(self, handler_input):
+    def can_handle(self, handler_input): 
         return ask_utils.is_intent_name("LockerAccessIntent")(handler_input)
     def handle(self, handler_input):
         packages = LATEST_PACKAGES.get("4B", [])
@@ -389,6 +391,55 @@ class SessionEndedRequestHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         logger.info("Session ended")
         return handler_input.response_builder.response
+def get_time_of_day():
+    hour = datetime.now().hour
+    if 5 <= hour < 12: return "morning"
+    elif 12 <= hour < 17: return "afternoon"
+    else: return "evening"
+
+def get_urgency(days):
+    if days >= 7: return "URGENT"
+    elif days >= 5: return "Important"
+    elif days >= 3: return "Reminder"
+    else: return "New"
+
+def calculate_waiting_days(delivered_at):
+    delivered = datetime.fromisoformat(delivered_at.replace('Z', '+00:00'))
+    now = datetime.now(delivered.tzinfo)
+    return (now - delivered).days
+
+def generate_package_summary(packages):
+    if not packages:
+        return "You have no packages right now."
+    
+    total = len(packages)
+    carrier_counts = {}
+    total_waiting = 0
+    
+    for p in packages:
+        carrier = p.get('carrier', 'unknown')
+        carrier_counts[carrier] = carrier_counts.get(carrier, 0) + 1
+        
+        # Calculate waiting days
+        delivered_at = p.get('delivered_at')
+        if delivered_at:
+            days = calculate_waiting_days(delivered_at)
+            total_waiting = max(total_waiting, days)
+    
+    parts = []
+    for carrier, count in carrier_counts.items():
+        parts.append(f"{count} from {carrier}")
+    
+    # Add urgency if waiting
+    urgency = get_urgency(total_waiting)
+    time = get_time_of_day()
+    
+    if total_waiting >= 7:
+        return f"URGENT: You have {total} packages that have been waiting for {total_waiting} days: {', '.join(parts)}."
+    elif total_waiting >= 3:
+        return f"Reminder: You have {total} packages waiting for {total_waiting} days: {', '.join(parts)}."
+    else:
+        return f"Good {time}! You have {total} packages: {', '.join(parts)}."
     
 # ============================================
 # SKILL BUILDER REGISTRATION
