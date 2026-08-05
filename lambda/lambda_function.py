@@ -90,7 +90,8 @@ class AlexaProactiveEventsClient:
                 "name": "AMAZON.OrderStatus.Updated",
                 "payload": {
                     "state": {
-                        "status": "ORDER_DELIVERED"
+                        "status": "ORDER_DELIVERED",
+                        "deliveredOn": now
                     },
                     "order": {
                         "seller": {
