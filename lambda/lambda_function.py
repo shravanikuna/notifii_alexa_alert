@@ -36,6 +36,7 @@ config = Config()
 # ============================================
 # ALEXA PROACTIVE EVENTS CLIENT
 # ============================================
+LATEST_PACKAGES = {}
 
 class AlexaProactiveEventsClient:
     def __init__(self):
@@ -161,7 +162,6 @@ def get_user_configuration(unit: str) -> Optional[Dict]:
 
 def handle_package_event(event: Dict, context: Any) -> Dict:
     logger.info(f"📦 Webhook event received: {event}")
-
     data = event.get('data', {})
     unit = data.get('unit')
     package_id = data.get('package_id')
@@ -178,6 +178,14 @@ def handle_package_event(event: Dict, context: Any) -> Dict:
         return {"status": "skipped", "reason": "User not opted in"}
 
     alexa_user_id = user_config.get('alexa_user_id')
+    LATEST_PACKAGES.setdefault(unit, []).append({
+        "package_id": package_id,
+        "carrier": carrier,
+        "tracking_number": data.get("tracking_number"),
+        "compartment": data.get("compartment"),
+        "package_size": data.get("package_size"),
+        "signature_required": data.get("signature_required"),
+    })
 
     debug_info = {
         "active_alexa_user_id_present": bool(alexa_user_id),
@@ -244,23 +252,46 @@ class LaunchRequestHandler(AbstractRequestHandler):
         )
 
 
+# class PackageStatusIntentHandler(AbstractRequestHandler):
+#     def can_handle(self, handler_input):
+#         return ask_utils.is_intent_name("PackageStatusIntent")(handler_input)
+
+#     def handle(self, handler_input):
+#         user_id = handler_input.request_envelope.context.system.user.user_id
+#         logger.info(f"PackageStatusIntent triggered by user: {user_id}")
+#         speak_output = "You have 2 packages waiting. One from FedEx arrived today, and one from UPS arrived yesterday."
+#         return handler_input.response_builder.speak(speak_output).response
+
 class PackageStatusIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
         return ask_utils.is_intent_name("PackageStatusIntent")(handler_input)
-
     def handle(self, handler_input):
-        user_id = handler_input.request_envelope.context.system.user.user_id
-        logger.info(f"PackageStatusIntent triggered by user: {user_id}")
-        speak_output = "You have 2 packages waiting. One from FedEx arrived today, and one from UPS arrived yesterday."
+        packages = LATEST_PACKAGES.get("4B", [])
+        if not packages:
+            speak_output = "You have no packages right now."
+        else:
+            parts = [f"one from {p['carrier']}" for p in packages]
+            speak_output = f"You have {len(packages)} packages: {', '.join(parts)}."
         return handler_input.response_builder.speak(speak_output).response
 
+# class LockerAccessIntentHandler(AbstractRequestHandler):
+#     def can_handle(self, handler_input):
+#         return ask_utils.is_intent_name("LockerAccessIntent")(handler_input)
+
+#     def handle(self, handler_input):
+#         speak_output = "Your package is in locker B4. Please use access code 12345."
+#         return handler_input.response_builder.speak(speak_output).response
 
 class LockerAccessIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
         return ask_utils.is_intent_name("LockerAccessIntent")(handler_input)
-
     def handle(self, handler_input):
-        speak_output = "Your package is in locker B4. Please use access code 12345."
+        packages = LATEST_PACKAGES.get("4B", [])
+        if not packages:
+            speak_output = "You have no packages in a locker right now."
+        else:
+            latest = packages[-1]
+            speak_output = f"Your package is in compartment {latest['compartment']}."
         return handler_input.response_builder.speak(speak_output).response
 
 
