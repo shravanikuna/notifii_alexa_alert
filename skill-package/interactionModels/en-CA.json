@@ -25,14 +25,19 @@
         },
         {
           "name": "PackageStatusIntent",
-          "slots": [],
           "samples": [
-            "check my packages",
-            "do I have any packages",
-            "package status",
-            "any deliveries today",
-            "what packages are waiting",
-            "how many packages do I have"
+            "ask Notifii Alert for my packages",
+            "ask Notifii Alert to check mailroom",
+            "ask Notifii Alert what is waiting",
+            "tell Notifii Alert to show packages",
+            "ask Notifii Alert for package status",
+            "ask Notifii Alert how many packages i have",
+            "ask Notifii Alert if i have any packages",
+            "ask Notifii Alert if i have any deliveries",
+            "ask Notifii Alert if i have any mailroom deliveries",
+            "ask Notifii Alert if i have any mailroom packages",
+            "ask Notifii Alert if i have any mailroom packages waiting",
+            "ask Notifii Alert if i have any mailroom packages delivered"
           ]
         },
         {
