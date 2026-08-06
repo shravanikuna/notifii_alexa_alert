@@ -42,13 +42,13 @@
       },
       "locales": {
         "en-US": {
-          "name": "Notiffi Alert",
+          "name": "rabbit",
           "summary": "Smart delivery tracking for residents.",
-          "description": "Receive package and locker alerts with Notiffi Alert.",
+          "description": "Receive package and locker alerts with Rabbit.",
           "examplePhrases": [
-            "Alexa, open Notiffi Alert",
-            "Alexa, ask Notiffi Alert for my packages",
-            "Alexa, ask Notiffi Alert for mailroom hours"
+            "Alexa, open rabbit",
+            "Alexa, ask rabbit for my packages",
+            "Alexa, ask rabbit for mailroom hours"
           ],
           "keywords": [
             "packages",

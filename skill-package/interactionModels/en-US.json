@@ -1,7 +1,7 @@
   {
     "interactionModel": {
       "languageModel": {
-        "invocationName": "notiffi alert",
+        "invocationName": "rabbit",
         "intents": [
           {
             "name": "AMAZON.CancelIntent",
@@ -26,18 +26,18 @@
           {
             "name": "PackageStatusIntent",
             "samples": [
-              "ask Notifii Alert for my packages",
-              "ask Notifii Alert to check mailroom",
-              "ask Notifii Alert what is waiting",
-              "tell Notifii Alert to show packages",
-              "ask Notifii Alert for package status",
-              "ask Notifii Alert how many packages i have",
-              "ask Notifii Alert if i have any packages",
-              "ask Notifii Alert if i have any deliveries",
-              "ask Notifii Alert if i have any mailroom deliveries",
-              "ask Notifii Alert if i have any mailroom packages",
-              "ask Notifii Alert if i have any mailroom packages waiting",
-              "ask Notifii Alert if i have any mailroom packages delivered"
+              "ask rabbit for my packages",
+              "ask rabbit to check mailroom",
+              "ask rabbit what is waiting",
+              "tell rabbit to show packages",
+              "ask rabbit for package status",
+              "ask rabbit how many packages i have",
+              "ask rabbit if i have any packages",
+              "ask rabbit if i have any deliveries",
+              "ask rabbit if i have any mailroom deliveries",
+              "ask rabbit if i have any mailroom packages",
+              "ask rabbit if i have any mailroom packages waiting",
+              "ask rabbit if i have any mailroom packages delivered"
             ]
           },
           {
