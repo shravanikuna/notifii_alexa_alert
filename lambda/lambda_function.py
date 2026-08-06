@@ -24,28 +24,26 @@ logger.setLevel(logging.INFO)
 # ============================================
 
 class Config:
-    # ALEXA_CLIENT_ID = os.environ.get('ALEXA_CLIENT_ID', '')
-    # ALEXA_CLIENT_SECRET = os.environ.get('ALEXA_CLIENT_SECRET', '')
     ALEXA_CLIENT_ID = os.environ.get('ALEXA_CLIENT_ID', '').strip()
     ALEXA_CLIENT_SECRET = os.environ.get('ALEXA_CLIENT_SECRET', '').strip()
     ALEXA_API_URL = os.environ.get('ALEXA_API_URL', '').strip()
-    # Global state tracker for development/testing
     LATEST_ALEXA_USER_ID = os.environ.get('ALEXA_USER_ID', '').strip()
-    # ALEXA_API_URL = os.environ.get('ALEXA_API_URL', 'https://api.eu.amazonalexa.com/v1/proactiveEvents/stages/development')
 
 config = Config()
 
 # ============================================
-# ALEXA PROACTIVE EVENTS CLIENT
+# GLOBAL STATE (POC only — resets on restart)
 # ============================================
-# POC had no database to store user → unit mappings
-# Only one test user "4B" was used for all testing
 
 LATEST_PACKAGES = {}
-CURRENT_UNIT = "4B",
+CURRENT_UNIT = "4B"
 USER_ID_TO_UNIT = {
-   LATEST_ALEXA_USER_ID: "4B"
+    config.LATEST_ALEXA_USER_ID: "4B"
 }
+
+# ============================================
+# ALEXA PROACTIVE EVENTS CLIENT
+# ============================================
 
 class AlexaProactiveEventsClient:
     def __init__(self):
@@ -56,7 +54,6 @@ class AlexaProactiveEventsClient:
         self._token_expires_at = datetime.utcnow()
 
     def get_token(self) -> Optional[str]:
-        # Return cached token if valid for at least 5 more minutes
         if self._cached_token and datetime.utcnow() < self._token_expires_at:
             return self._cached_token
 
@@ -91,7 +88,6 @@ class AlexaProactiveEventsClient:
         now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         expiry = (datetime.utcnow() + timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        # Correct schema payload for AMAZON.OrderStatus.Updated
         payload = {
             "timestamp": now,
             "referenceId": f"notifii.{package_id}.{int(datetime.utcnow().timestamp())}",
@@ -135,7 +131,6 @@ class AlexaProactiveEventsClient:
                 logger.info(f"Notification successfully sent to {alexa_user_id}")
                 logger.info(f"Amazon Request ID: {response.headers.get('x-amzn-requestid')}")
                 return {"status": "success", "code": 202}
-
             else:
                 logger.error(f"Proactive Events API error: {response.status_code} - {response.text}")
                 return {"status": "error", "code": response.status_code, "message": response.text}
@@ -145,23 +140,17 @@ class AlexaProactiveEventsClient:
 
 alexa_client = AlexaProactiveEventsClient()
 
-
 # ============================================
 # USER DATA STORE
 # ============================================
 
-
 def get_user_configuration(unit: str) -> Optional[Dict]:
-    """Fetch user configuration. Uses LATEST_ALEXA_USER_ID updated dynamically at launch."""
-    # active_user_id = LATEST_ALEXA_USER_ID or os.environ.get('ALEXA_USER_ID', '')
     active_user_id = os.environ.get('ALEXA_USER_ID', '').strip()
-    
     configs = {
         "4B": {"unit": "4B", "opted_alexa": True, "alexa_user_id": active_user_id},
         "2A": {"unit": "2A", "opted_alexa": True, "alexa_user_id": active_user_id}
     }
     return configs.get(unit)
-
 
 # ============================================
 # WEBHOOK HANDLER
@@ -203,7 +192,7 @@ def handle_package_event(event: Dict, context: Any) -> Dict:
 
     if not alexa_user_id:
         return {"status": "skipped", "reason": "No Alexa User ID linked", "debug": debug_info}
-    
+
     logger.info(f"RAW USERID REPR: {repr(alexa_user_id)}")
 
     result = alexa_client.send_notification(alexa_user_id, carrier, package_id)
@@ -224,7 +213,6 @@ def handle_package_event(event: Dict, context: Any) -> Dict:
             "debug": debug_info
         }
 
-
 # ============================================
 # ALEXA SKILL INTENT & EVENT HANDLERS
 # ============================================
@@ -239,25 +227,6 @@ class ProactiveSubscriptionChangedHandler(AbstractRequestHandler):
         return handler_input.response_builder.response
 
 
-# class LaunchRequestHandler(AbstractRequestHandler):
-#     def can_handle(self, handler_input):
-#         return ask_utils.is_request_type("LaunchRequest")(handler_input)
-
-#     def handle(self, handler_input):
-#         user_id = handler_input.request_envelope.context.system.user.user_id
-#         logger.info(f"🚀 LaunchRequest triggered by User ID: {user_id}")
-        
-#         # Dynamically store active user ID
-#         global LATEST_ALEXA_USER_ID
-#         LATEST_ALEXA_USER_ID = user_id
-
-#         speak_output = "Welcome to Notifii Alert. Your account is connected for package updates."
-#         return (
-#             handler_input.response_builder
-#             .speak(speak_output)
-#             .ask("How can I help you?")
-#             .response
-#         )
 class LaunchRequestHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
         return ask_utils.is_request_type("LaunchRequest")(handler_input)
@@ -265,27 +234,17 @@ class LaunchRequestHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         global LATEST_ALEXA_USER_ID, CURRENT_UNIT
         LATEST_ALEXA_USER_ID = handler_input.request_envelope.context.system.user.user_id
-        
-        # Map user ID to unit
         CURRENT_UNIT = USER_ID_TO_UNIT.get(LATEST_ALEXA_USER_ID, "4B")
         logger.info(f"🚀 User {LATEST_ALEXA_USER_ID[:20]}... mapped to unit {CURRENT_UNIT}")
-        
+
         speak_output = "Welcome to Notifii Alert. Your account is connected for package updates."
         return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
-# class PackageStatusIntentHandler(AbstractRequestHandler):
-#     def can_handle(self, handler_input):
-#         return ask_utils.is_intent_name("PackageStatusIntent")(handler_input)
 
-#     def handle(self, handler_input):
-#         user_id = handler_input.request_envelope.context.system.user.user_id
-#         logger.info(f"PackageStatusIntent triggered by user: {user_id}")
-#         speak_output = "You have 2 packages waiting. One from FedEx arrived today, and one from UPS arrived yesterday."
-#         return handler_input.response_builder.speak(speak_output).response
 
 class PackageStatusIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
         return ask_utils.is_intent_name("PackageStatusIntent")(handler_input)
-    
+
     def handle(self, handler_input):
         packages = LATEST_PACKAGES.get(CURRENT_UNIT, [])
         if not packages:
@@ -294,29 +253,20 @@ class PackageStatusIntentHandler(AbstractRequestHandler):
             speak_output = generate_package_summary(packages)
         return handler_input.response_builder.speak(speak_output).response
 
-# class LockerAccessIntentHandler(AbstractRequestHandler):
-#     def can_handle(self, handler_input):
-#         return ask_utils.is_intent_name("LockerAccessIntent")(handler_input)
-
-#     def handle(self, handler_input):
-#         speak_output = "Your package is in locker B4. Please use access code 12345."
-#         return handler_input.response_builder.speak(speak_output).response
 
 class LockerAccessIntentHandler(AbstractRequestHandler):
-    def can_handle(self, handler_input): 
+    def can_handle(self, handler_input):
         return ask_utils.is_intent_name("LockerAccessIntent")(handler_input)
-    
+
     def handle(self, handler_input):
-        unit = CURRENT_UNIT if 'CURRENT_UNIT' in globals() else "4B"
-        packages = LATEST_PACKAGES.get(unit, [])
-        
+        packages = LATEST_PACKAGES.get(CURRENT_UNIT, [])
         if not packages:
             speak_output = "You have no packages in a locker right now."
         else:
             latest = packages[-1]
             speak_output = f"Your package is in compartment {latest.get('compartment', 'unknown')}."
-        
         return handler_input.response_builder.speak(speak_output).response
+
 
 class MailroomHoursIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
@@ -357,53 +307,35 @@ class FallbackIntentHandler(AbstractRequestHandler):
         return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
 
 
-# ============================================
-# EXCEPTION HANDLER
-# ============================================
-
 class CatchAllExceptionHandler(AbstractExceptionHandler):
-    """Catch-all exception handler to prevent HTTP 500 responses."""
     def can_handle(self, handler_input, exception):
         return True
 
     def handle(self, handler_input, exception):
         logger.error(f"Error handling request: {exception}", exc_info=True)
         speak_output = "Sorry, I had trouble processing your request. Please try again."
-        return (
-            handler_input.response_builder
-            .speak(speak_output)
-            .response
-        )
+        return handler_input.response_builder.speak(speak_output).response
+
 
 class SkillPermissionChangedHandler(AbstractRequestHandler):
-
     def can_handle(self, handler_input):
-        return ask_utils.is_request_type(
-            "AlexaSkillEvent.SkillPermissionChanged"
-        )(handler_input)
+        return ask_utils.is_request_type("AlexaSkillEvent.SkillPermissionChanged")(handler_input)
 
     def handle(self, handler_input):
         logger.info("Permission Changed")
-        logger.info(json.dumps(
-            handler_input.request_envelope.to_dict(),
-            indent=2
-        ))
+        logger.info(json.dumps(handler_input.request_envelope.to_dict(), indent=2))
         return handler_input.response_builder.response
 
-class SkillDisabledHandler(AbstractRequestHandler):
 
+class SkillDisabledHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
-        return ask_utils.is_request_type(
-            "AlexaSkillEvent.SkillDisabled"
-        )(handler_input)
+        return ask_utils.is_request_type("AlexaSkillEvent.SkillDisabled")(handler_input)
 
     def handle(self, handler_input):
         logger.info("Skill Disabled")
-        logger.info(json.dumps(
-            handler_input.request_envelope.to_dict(),
-            indent=2
-        ))
+        logger.info(json.dumps(handler_input.request_envelope.to_dict(), indent=2))
         return handler_input.response_builder.response
+
 
 class SessionEndedRequestHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
@@ -412,56 +344,62 @@ class SessionEndedRequestHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         logger.info("Session ended")
         return handler_input.response_builder.response
+
+
 def get_time_of_day():
     hour = datetime.now().hour
-    if 5 <= hour < 12: return "morning"
-    elif 12 <= hour < 17: return "afternoon"
-    else: return "evening"
+    if 5 <= hour < 12:
+        return "morning"
+    elif 12 <= hour < 17:
+        return "afternoon"
+    else:
+        return "evening"
+
 
 def get_urgency(days):
-    if days >= 7: return "URGENT"
-    elif days >= 5: return "Important"
-    elif days >= 3: return "Reminder"
-    else: return "New"
+    if days >= 7:
+        return "URGENT"
+    elif days >= 5:
+        return "Important"
+    elif days >= 3:
+        return "Reminder"
+    else:
+        return "New"
+
 
 def calculate_waiting_days(delivered_at):
     delivered = datetime.fromisoformat(delivered_at.replace('Z', '+00:00'))
     now = datetime.now(delivered.tzinfo)
     return (now - delivered).days
 
+
 def generate_package_summary(packages):
     if not packages:
         return "You have no packages right now."
-    
+
     total = len(packages)
     carrier_counts = {}
     total_waiting = 0
-    
+
     for p in packages:
         carrier = p.get('carrier', 'unknown')
         carrier_counts[carrier] = carrier_counts.get(carrier, 0) + 1
-        
-        # Calculate waiting days
+
         delivered_at = p.get('delivered_at')
         if delivered_at:
             days = calculate_waiting_days(delivered_at)
             total_waiting = max(total_waiting, days)
-    
-    parts = []
-    for carrier, count in carrier_counts.items():
-        parts.append(f"{count} from {carrier}")
-    
-    # Add urgency if waiting
-    urgency = get_urgency(total_waiting)
-    time = get_time_of_day()
-    
+
+    parts = [f"{count} from {carrier}" for carrier, count in carrier_counts.items()]
+
     if total_waiting >= 7:
         return f"URGENT: You have {total} packages that have been waiting for {total_waiting} days: {', '.join(parts)}."
     elif total_waiting >= 3:
         return f"Reminder: You have {total} packages waiting for {total_waiting} days: {', '.join(parts)}."
     else:
         return f"You have {total} packages: {', '.join(parts)}."
-    
+
+
 # ============================================
 # SKILL BUILDER REGISTRATION
 # ============================================
@@ -479,7 +417,6 @@ sb.add_request_handler(HelpIntentHandler())
 sb.add_request_handler(CancelAndStopIntentHandler())
 sb.add_request_handler(FallbackIntentHandler())
 
-# Catch-all exception handler (prevents 500 internal server errors)
 sb.add_exception_handler(CatchAllExceptionHandler())
 
 lambda_handler = sb.lambda_handler()
