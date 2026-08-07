@@ -44,16 +44,13 @@
         "en-US": {
           "name": "rabbit",
           "summary": "Smart delivery tracking for residents.",
-          "description": "Receive package and locker alerts with Rabbit.",
+          "description": "Receive package alerts with Rabbit.",
           "examplePhrases": [
             "Alexa, open rabbit",
-            "Alexa, ask rabbit for my packages",
-            "Alexa, ask rabbit for mailroom hours"
+            "Alexa, ask rabbit for my packages"
           ],
           "keywords": [
-            "packages",
-            "delivery",
-            "mailroom"
+            "packages"
           ]
         }
       },
