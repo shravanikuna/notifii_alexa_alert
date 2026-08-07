@@ -469,7 +469,7 @@ class SkillPermissionChangedHandler(AbstractRequestHandler):
         logger.info("Permission Changed")
         logger.info(json.dumps(handler_input.request_envelope.to_dict(), indent=2))
         return handler_input.response_builder.response
-
+ 
 
 class SkillDisabledHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
