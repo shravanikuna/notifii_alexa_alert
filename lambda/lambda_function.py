@@ -411,12 +411,21 @@ class CompartmentInquiryIntentHandler(AbstractRequestHandler):
         return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
 
 
+class ExitIntentHandler(AbstractRequestHandler):
+    def can_handle(self, handler_input):
+        return ask_utils.is_intent_name("ExitIntent")(handler_input)
+
+    def handle(self, handler_input):
+        speak_output = "Goodbye! Have a great day."
+        return handler_input.response_builder.speak(speak_output).set_should_end_session(True).response
+
+
 class HelpIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
         return ask_utils.is_intent_name("AMAZON.HelpIntent")(handler_input)
 
     def handle(self, handler_input):
-        speak_output = "You can ask me more about your package, such as the carrier, tracking number, or compartment. How can I assist you?"
+        speak_output = "You can ask me about your packages. For example, you can say 'what packages do I have?' or 'tell me more about my package.' You can also ask for specific details like carrier, tracking number, or compartment."
         return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
 
 
@@ -428,17 +437,7 @@ class CancelAndStopIntentHandler(AbstractRequestHandler):
         )
 
     def handle(self, handler_input):
-        speak_output = "Goodbye!"
-        return handler_input.response_builder.speak(speak_output).response
-
-
-class ExitIntentHandler(AbstractRequestHandler):
-    """Handle explicit exit requests"""
-    def can_handle(self, handler_input):
-        return ask_utils.is_intent_name("ExitIntent")(handler_input)
-
-    def handle(self, handler_input):
-        speak_output = "Okay, exiting. Have a great day!"
+        speak_output = "Goodbye! Have a great day."
         return handler_input.response_builder.speak(speak_output).set_should_end_session(True).response
 
 
@@ -469,7 +468,7 @@ class SkillPermissionChangedHandler(AbstractRequestHandler):
         logger.info("Permission Changed")
         logger.info(json.dumps(handler_input.request_envelope.to_dict(), indent=2))
         return handler_input.response_builder.response
- 
+
 
 class SkillDisabledHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
@@ -500,11 +499,11 @@ sb.add_request_handler(SessionEndedRequestHandler())
 sb.add_request_handler(ProactiveSubscriptionChangedHandler())
 sb.add_request_handler(LaunchRequestHandler())
 sb.add_request_handler(PackageStatusIntentHandler())
-sb.add_request_handler(PackageDetailsIntentHandler())  # NEW
-sb.add_request_handler(CarrierInquiryIntentHandler())   # NEW
-sb.add_request_handler(TrackingInquiryIntentHandler())  # NEW
-sb.add_request_handler(CompartmentInquiryIntentHandler()) # NEW
-sb.add_request_handler(ExitIntentHandler())             # NEW
+sb.add_request_handler(PackageDetailsIntentHandler())
+sb.add_request_handler(CarrierInquiryIntentHandler())
+sb.add_request_handler(TrackingInquiryIntentHandler())
+sb.add_request_handler(CompartmentInquiryIntentHandler())
+sb.add_request_handler(ExitIntentHandler())
 sb.add_request_handler(HelpIntentHandler())
 sb.add_request_handler(CancelAndStopIntentHandler())
 sb.add_request_handler(FallbackIntentHandler())

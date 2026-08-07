@@ -16,15 +16,12 @@
           "samples": []
         },
         {
-          "name": "AMAZON.NavigateHomeIntent",
-          "samples": []
-        },
-        {
           "name": "AMAZON.FallbackIntent",
           "samples": []
         },
         {
           "name": "PackageStatusIntent",
+          "slots": [],
           "samples": [
             "ask rabbit for my packages",
             "ask rabbit to check mailroom",
@@ -41,26 +38,63 @@
           ]
         },
         {
-          "name": "LockerAccessIntent",
+          "name": "PackageDetailsIntent",
           "slots": [],
           "samples": [
-            "get my access code",
-            "locker code",
-            "how to open my locker",
-            "access my package",
-            "open my locker",
-            "what's my locker number"
+            "tell me more about my package",
+            "give me details",
+            "more information",
+            "tell me about my packages",
+            "give me package details",
+            "what are the details",
+            "show me details"
           ]
         },
         {
-          "name": "MailroomHoursIntent",
+          "name": "CarrierInquiryIntent",
           "slots": [],
           "samples": [
-            "when does the mailroom open",
-            "mailroom hours",
-            "when does the mailroom close",
-            "what are the mailroom hours",
-            "mailroom schedule"
+            "what carrier",
+            "who delivered it",
+            "which delivery service",
+            "what's the carrier",
+            "who delivered my package",
+            "which carrier"
+          ]
+        },
+        {
+          "name": "TrackingInquiryIntent",
+          "slots": [],
+          "samples": [
+            " what's the tracking number",
+            "give me tracking",
+            "tracking number please",
+            "what is the tracking number",
+            "give me the tracking number",
+            "tracking info"
+          ]
+        },
+        {
+          "name": "CompartmentInquiryIntent",
+          "slots": [],
+          "samples": [
+            " which compartment",
+            "where is it stored",
+            "what compartment",
+            "which locker",
+            "where is my package",
+            "what's the compartment"
+          ]
+        },
+        {
+          "name": "ExitIntent",
+          "slots": [],
+          "samples": [
+            "exit",
+            "quit",
+            "goodbye",
+            "exit rabbit",
+            "close"
           ]
         }
       ],
