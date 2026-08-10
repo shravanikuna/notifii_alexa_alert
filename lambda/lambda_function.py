@@ -3,6 +3,7 @@ import json
 import os
 import uuid
 import requests
+import re
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Any, List
 
@@ -173,18 +174,60 @@ def get_package_status_summary(packages: List[Dict]) -> str:
     return f"You have {len(packages)} packages: {', '.join(lines)}. Would you like to know more about any of them?"
 
 # ============================================
-# HELPERS — lookup
+# HELPERS — improved lookup with normalization
 # ============================================
+def normalize_text(text: str) -> str:
+    """Normalize text by removing periods, spaces, and converting to lowercase"""
+    if not text:
+        return ""
+    # Remove periods, spaces, hyphens, and convert to lowercase
+    normalized = re.sub(r'[.\s\-]+', '', text.lower().strip())
+    return normalized
+
 def find_packages_by_carrier(packages: List[Dict], carrier_query: str) -> List[Dict]:
-    q = carrier_query.lower().strip()
-    return [p for p in packages if q in p.get('carrier', '').lower()]
+    """Find packages by carrier with improved matching"""
+    if not carrier_query:
+        return []
+    
+    # Normalize the query
+    query_normalized = normalize_text(carrier_query)
+    
+    # Try exact match first
+    exact_matches = []
+    partial_matches = []
+    
+    for p in packages:
+        carrier = p.get('carrier', '')
+        carrier_normalized = normalize_text(carrier)
+        
+        # Check if the normalized carrier contains the query or vice versa
+        if query_normalized in carrier_normalized or carrier_normalized in query_normalized:
+            # Prefer exact matches over partial
+            if query_normalized == carrier_normalized:
+                exact_matches.append(p)
+            else:
+                partial_matches.append(p)
+    
+    # Return exact matches first, then partial matches
+    return exact_matches + partial_matches
 
 def find_package_by_tracking(packages: List[Dict], tracking_query: str) -> Optional[Dict]:
-    q = tracking_query.lower().strip().replace(" ", "")
+    """Find a package by tracking number with improved matching"""
+    if not tracking_query:
+        return None
+    
+    # Normalize the query
+    query_normalized = normalize_text(tracking_query)
+    
+    # Try exact match first, then partial
     for p in packages:
-        stored = (p.get('tracking_number') or '').lower().replace(" ", "").replace("-", "")
-        if q.replace("-", "") in stored or stored in q:
+        stored = p.get('tracking_number', '')
+        stored_normalized = normalize_text(stored)
+        
+        # Check if the normalized tracking contains the query or vice versa
+        if query_normalized in stored_normalized or stored_normalized in query_normalized:
             return p
+    
     return None
 
 def get_slot_value(handler_input, slot_name: str) -> Optional[str]:
@@ -202,7 +245,7 @@ def resolve_package(handler_input, packages: List[Dict]):
     """
     Returns one of:
       ("resolved", package_dict)      — exactly one package identified
-      ("ambiguous", [package, ...])   — multiple matches, need tracking number to disambiguate
+      ("ambiguous", [package, ...])   — multiple matches, need tracking number
       ("not_found", None)             — no match at all
       ("need_selection", None)        — no slot given and more than one package exists
     """
@@ -211,41 +254,59 @@ def resolve_package(handler_input, packages: List[Dict]):
     if not packages:
         return ("not_found", None)
 
-    # 1. Tracking number is the most specific — always wins, resolves any pending ambiguity
+    # Get slot values
+    carrier_value = get_slot_value(handler_input, 'carrier')
     tracking_value = get_slot_value(handler_input, 'tracking')
+    
+    logger.info(f"🔍 Resolving package - carrier: '{carrier_value}', tracking: '{tracking_value}'")
+    logger.info(f"📦 Total packages: {len(packages)}")
+
+    # 1. TRACKING NUMBER - Most specific, ALWAYS wins
     if tracking_value:
+        logger.info(f"🔢 Looking for tracking number: '{tracking_value}'")
         found = find_package_by_tracking(packages, tracking_value)
         if found:
             session_attr['current_package'] = found
             session_attr.pop('pending_matches', None)
+            logger.info(f"✅ Resolved by tracking: {found.get('tracking_number')} -> {found.get('carrier')}")
             return ("resolved", found)
+        logger.info(f"❌ No package found with tracking: '{tracking_value}'")
         return ("not_found", None)
 
-    # 2. Carrier slot
-    carrier_value = get_slot_value(handler_input, 'carrier')
+    # 2. CARRIER NAME - Can be ambiguous
     if carrier_value:
+        logger.info(f"🏷️ Looking for carrier: '{carrier_value}'")
         matches = find_packages_by_carrier(packages, carrier_value)
+        logger.info(f"📊 Found {len(matches)} matches for carrier '{carrier_value}'")
+        
         if len(matches) == 1:
             session_attr['current_package'] = matches[0]
             session_attr.pop('pending_matches', None)
+            logger.info(f"✅ Resolved by carrier: {matches[0].get('carrier')} -> {matches[0].get('tracking_number')}")
             return ("resolved", matches[0])
         elif len(matches) > 1:
             session_attr['pending_matches'] = matches
+            logger.info(f"⚠️ Ambiguous: {len(matches)} packages from {carrier_value}")
             return ("ambiguous", matches)
         else:
+            logger.info(f"❌ No packages found for carrier: '{carrier_value}'")
             return ("not_found", None)
 
-    # 3. No slot given at all — fall back to session context
+    # 3. SESSION CONTEXT - Use remembered package
     current = session_attr.get('current_package')
     if current and current in packages:
+        logger.info(f"🔄 Resolved from session: {current.get('carrier')} -> {current.get('tracking_number')}")
         return ("resolved", current)
 
+    # 4. ONLY ONE PACKAGE - Auto-select
     if len(packages) == 1:
         session_attr['current_package'] = packages[0]
+        logger.info(f"📌 Auto-selected only package: {packages[0].get('carrier')}")
         return ("resolved", packages[0])
 
+    # 5. MULTIPLE PACKAGES - Need user to specify
+    logger.info(f"❓ Need selection - {len(packages)} packages available")
     return ("need_selection", None)
-
 def ambiguous_prompt(matches: List[Dict]) -> str:
     carrier = matches[0].get('carrier', 'that carrier')
     trackings = [m.get('tracking_number', 'unknown') for m in matches]
@@ -358,15 +419,15 @@ class PackageDetailsIntentHandler(AbstractRequestHandler):
             speak_output = ambiguous_prompt(result)
             return handler_input.response_builder.speak(speak_output).ask("Which tracking number?").response
         elif status == "need_selection":
-            speak_output = "Which package would you like to know about — you can say the carrier name."
+            speak_output = "Which package would you like to know about — you can say the carrier name or tracking number."
             return handler_input.response_builder.speak(speak_output).ask(speak_output).response
         else:
-            speak_output = "I couldn't find a package matching that. You have no packages right now." if not packages else "I couldn't find that package. Try saying the carrier name."
+            speak_output = "I couldn't find a package matching that. You have no packages right now." if not packages else "I couldn't find that package. Try saying the carrier name or tracking number."
             return handler_input.response_builder.speak(speak_output).response
 
 
 class TrackingNumberIntentHandler(AbstractRequestHandler):
-    """Handles replies like '8888' when disambiguating."""
+    """Handles replies like '555' when disambiguating."""
     def can_handle(self, handler_input):
         return ask_utils.is_intent_name("TrackingNumberIntent")(handler_input)
 
@@ -396,7 +457,7 @@ class CarrierInquiryIntentHandler(AbstractRequestHandler):
         elif status == "ambiguous":
             speak_output = ambiguous_prompt(result)
         else:
-            speak_output = "I couldn't find that package. Please specify the carrier."
+            speak_output = "I couldn't find that package. Please specify the carrier or tracking number."
         return handler_input.response_builder.speak(speak_output).ask("Anything else?").response
 
 
