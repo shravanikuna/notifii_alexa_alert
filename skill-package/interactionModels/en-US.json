@@ -27,67 +27,87 @@
           "name": "PackageStatusIntent",
           "slots": [],
           "samples": [
-            "ask rabbit for my packages",
-            "ask rabbit to check mailroom",
-            "ask rabbit what is waiting",
-            "tell rabbit to show packages",
-            "ask rabbit for package status",
-            "ask rabbit how many packages i have",
-            "ask rabbit if i have any packages",
-            "ask rabbit if i have any deliveries",
-            "ask rabbit if i have any mailroom deliveries",
-            "ask rabbit if i have any mailroom packages",
-            "ask rabbit if i have any mailroom packages waiting",
-            "ask rabbit if i have any mailroom packages delivered"
+            "my packages",
+            "what packages do i have",
+            "any packages for me",
+            "package status"
           ]
         },
         {
           "name": "PackageDetailsIntent",
-          "slots": [],
+          "slots": [
+            {
+              "name": "carrier",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
           "samples": [
             "tell me more about my package",
             "give me details",
-            "more information",
-            "tell me about my packages",
-            "give me package details",
-            "what are the details",
-            "show me details"
+            "more information about {carrier}",
+            "tell me about {carrier} package",
+            "details for {carrier}"
           ]
         },
         {
           "name": "CarrierInquiryIntent",
-          "slots": [],
+          "slots": [
+            {
+              "name": "carrier",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
           "samples": [
             "what carrier",
             "who delivered it",
             "which delivery service",
-            "what's the carrier",
-            "who delivered my package",
-            "which carrier"
+            "carrier for {carrier}"
           ]
         },
         {
           "name": "TrackingInquiryIntent",
-          "slots": [],
+          "slots": [
+            {
+              "name": "carrier",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
           "samples": [
-            " what's the tracking number",
+            "what's the tracking number",
             "give me tracking",
             "tracking number please",
-            "what is the tracking number",
-            "give me the tracking number",
-            "tracking info"
+            "tracking for {carrier}"
           ]
         },
         {
           "name": "CompartmentInquiryIntent",
-          "slots": [],
+          "slots": [
+            {
+              "name": "carrier",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
           "samples": [
-            " which compartment",
+            "which compartment",
             "where is it stored",
             "what compartment",
-            "which locker",
-            "where is my package",
-            "what's the compartment"
+            "which locker for {carrier}"
+          ]
+        },
+        {
+          "name": "DeliveryInquiryIntent",
+          "slots": [
+            {
+              "name": "carrier",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "when was it delivered",
+            "delivery date",
+            "what time",
+            "when did it arrive",
+            "delivery time for {carrier}"
           ]
         },
         {
