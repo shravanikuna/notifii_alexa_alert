@@ -91,6 +91,10 @@
             {
               "name": "position",
               "type": "AMAZON.SearchQuery"
+            },
+            {
+              "name": "tracking",
+              "type": "AMAZON.SearchQuery"
             }
           ],
           "samples": [
@@ -98,7 +102,10 @@
             "give me tracking",
             "tracking number please",
             "tracking for {carrier}",
-            "tracking for package {position}"
+            "what carrier for package {position}",
+            "tell me about tracking {tracking}",
+            "package with tracking number {tracking}",
+            "tracking number {tracking}"
           ]
         },
         {

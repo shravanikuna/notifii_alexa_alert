@@ -474,6 +474,58 @@ class CarrierInquiryIntentHandler(AbstractRequestHandler):
         
         return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
 
+def find_packages_by_carrier(packages: List[Dict], carrier_query: str) -> List[Dict]:
+    """Return ALL matches, not just the first"""
+    carrier_query = carrier_query.lower().strip()
+    return [p for p in packages if carrier_query in p.get('carrier', '').lower()]
+
+def determine_package_context(handler_input, packages: List[Dict]):
+    """Returns either a single package dict, or a dict signaling ambiguity"""
+    session_attr = handler_input.attributes_manager.session_attributes
+    current_package = session_attr.get('current_package')
+
+    # Tracking number — most specific, check first
+    try:
+        tracking_slot = handler_input.request_envelope.request.intent.slots.get('tracking', {})
+        if tracking_slot and tracking_slot.get('value'):
+            found = find_package_by_tracking(packages, tracking_slot['value'].strip())
+            if found:
+                session_attr['current_package'] = found
+                return found
+    except Exception:
+        pass
+
+    # Carrier — check for AMBIGUITY now
+    try:
+        carrier_slot = handler_input.request_envelope.request.intent.slots.get('carrier', {})
+        if carrier_slot and carrier_slot.get('value'):
+            matches = find_packages_by_carrier(packages, carrier_slot['value'].strip())
+            if len(matches) == 1:
+                session_attr['current_package'] = matches[0]
+                return matches[0]
+            elif len(matches) > 1:
+                # Ambiguous — signal caller to ask for tracking number
+                session_attr['awaiting_tracking_disambiguation'] = True
+                return {"_ambiguous": True, "matches": matches}
+    except Exception:
+        pass
+
+    # Position (first, second, etc.)
+    try:
+        position_slot = handler_input.request_envelope.request.intent.slots.get('position', {})
+        if position_slot and position_slot.get('value'):
+            found = find_package_by_position(packages, position_slot['value'].strip())
+            if found:
+                session_attr['current_package'] = found
+                return found
+    except Exception:
+        pass
+
+    if current_package and current_package in packages:
+        return current_package
+    else:
+        session_attr['current_package'] = packages[-1]
+        return packages[-1]
 
 class TrackingInquiryIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
@@ -482,20 +534,22 @@ class TrackingInquiryIntentHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         packages = LATEST_PACKAGES.get(CURRENT_UNIT, [])
         if not packages:
-            speak_output = "You have no packages to inquire about."
-            return handler_input.response_builder.speak(speak_output).response
-        
-        # Determine which package the user is asking about
+            return handler_input.response_builder.speak("You have no packages to inquire about.").response
+
         selected_package = determine_package_context(handler_input, packages)
-        
+
+        if isinstance(selected_package, dict) and selected_package.get("_ambiguous"):
+            trackings = [p.get('tracking_number', 'unknown') for p in selected_package["matches"]]
+            speak_output = f"You have {len(trackings)} packages from that carrier. Which tracking number would you like — {' or '.join(trackings)}?"
+            return handler_input.response_builder.speak(speak_output).ask("Which tracking number?").response
+
         if selected_package:
             tracking = selected_package.get('tracking_number', 'no tracking number available')
             speak_output = f"The tracking number is {tracking}."
         else:
-            speak_output = "I couldn't find that package. Please specify which package you're asking about."
-        
-        return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
+            speak_output = "I couldn't find that package."
 
+        return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
 
 class CompartmentInquiryIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
