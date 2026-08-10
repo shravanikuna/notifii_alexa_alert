@@ -17,8 +17,7 @@
             "any notifications",
             "check notifications",
             "what are my packages",
-            "show me my packages",
-            "notifications"
+            "show me my packages"
           ]
         },
         {
@@ -58,24 +57,17 @@
             "the {carrier} package",
             "package from {carrier}",
             "the {carrier} one",
-            "the tracking number {carrier}",
             "the one from {carrier}",
             "{carrier} package",
             "about the {carrier} one",
             "give me the {carrier} package",
             "show me the {carrier} package",
             "the package from {carrier}",
-            "{carrier} with tracking {tracking}",
-            "{carrier} tracking number {tracking}",
-            "the {carrier} with tracking number {tracking}"
+            "the {carrier} with tracking"
           ],
           "slots": [
             {
               "name": "carrier",
-              "type": "AMAZON.SearchQuery"
-            },
-            {
-              "name": "tracking",
               "type": "AMAZON.SearchQuery"
             }
           ]
