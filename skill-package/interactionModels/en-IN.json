@@ -17,7 +17,9 @@
             "any notifications",
             "check notifications",
             "what are my packages",
-            "show me my packages"
+            "show me my packages",
+            "do i have new packages",
+            "any new packages"
           ]
         },
         {
@@ -42,12 +44,15 @@
             "details for {carrier}",
             "about {carrier}",
             "tell me about {carrier}",
-            "give me details about {carrier}"
+            "give me details about {carrier}",
+            "give me more details {carrier} package",
+            "more details {carrier}",
+            "details of {carrier} package"
           ],
           "slots": [
             {
               "name": "carrier",
-              "type": "AMAZON.SearchQuery"
+              "type": "CARRIER_TYPE"
             }
           ]
         },
@@ -62,13 +67,12 @@
             "about the {carrier} one",
             "give me the {carrier} package",
             "show me the {carrier} package",
-            "the package from {carrier}",
-            "the {carrier} with tracking"
+            "the package from {carrier}"
           ],
           "slots": [
             {
               "name": "carrier",
-              "type": "AMAZON.SearchQuery"
+              "type": "CARRIER_TYPE"
             }
           ]
         },
@@ -119,7 +123,8 @@
             "where can I find it",
             "compartment location",
             "where is the package",
-            "what is the compartment"
+            "what is the compartment",
+            "where it stored"
           ]
         },
         {
@@ -134,19 +139,7 @@
             "delivery day",
             "arrival time",
             "arrival date",
-            "what time did it arrive",
-            "when was the {carrier} package delivered",
-            "delivery of the {carrier} package",
-            "when the {carrier} package is delivered",
-            "when did {carrier} arrive",
-            "{carrier} delivery time",
-            "when was {carrier} delivered"
-          ],
-          "slots": [
-            {
-              "name": "carrier",
-              "type": "AMAZON.SearchQuery"
-            }
+            "what time did it arrive"
           ]
         },
         {
@@ -191,7 +184,81 @@
           "samples": []
         }
       ],
-      "types": []
+      "types": [
+        {
+          "name": "CARRIER_TYPE",
+          "values": [
+            {
+              "name": {
+                "value": "Amazon",
+                "synonyms": [
+                  "amazon",
+                  "amazon package",
+                  "amazon delivery",
+                  "amazon logistics"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "UPS",
+                "synonyms": [
+                  "ups",
+                  "ups package",
+                  "ups delivery",
+                  "u p s"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "FedEx",
+                "synonyms": [
+                  "fedex",
+                  "fed ex",
+                  "fedex package",
+                  "fedex delivery",
+                  "f e d e x"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "USPS",
+                "synonyms": [
+                  "usps",
+                  "post office",
+                  "postal",
+                  "u s p s",
+                  "united states postal service"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "DHL",
+                "synonyms": [
+                  "dhl",
+                  "d h l",
+                  "dhl package",
+                  "dhl delivery",
+                  "d h l express"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "OnTrac",
+                "synonyms": [
+                  "ontrac",
+                  "on trac",
+                  "on-trac"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   }
 }
