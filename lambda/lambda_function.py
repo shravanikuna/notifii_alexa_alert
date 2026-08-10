@@ -203,7 +203,7 @@ def get_package_summary(packages: List[Dict]) -> str:
         parts.append(f"{count} from {carrier}")
     
     if total == 1:
-        return f"You have 1 package: {', '.join(parts)}. If you want to know more about this package, just ask me."
+        return f"You have a package: {', '.join(parts)}. If you want to know more about this package, just ask me."
     else:
         return f"You have {total} packages: {', '.join(parts)}. If you want to know more about any package, just ask me."
 
@@ -562,28 +562,58 @@ class FallbackIntentHandler(AbstractRequestHandler):
         return ask_utils.is_intent_name("AMAZON.FallbackIntent")(handler_input)
 
     def handle(self, handler_input):
-        # Try to understand what the user wants
         packages = LATEST_PACKAGES.get(CURRENT_UNIT, [])
         
         if not packages:
             speak_output = "You have no packages right now. Would you like to know anything else?"
             return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
         
-        # Get the user's utterance to try and understand
+        # Get the user's utterance
         try:
             utterance = handler_input.request_envelope.request.intent.name
             logger.info(f"Fallback intent triggered with utterance: {utterance}")
         except:
             pass
         
-        # If there are packages, suggest what they can ask
+        # Build dynamic package listing
         if len(packages) == 1:
-            speak_output = "I understand you have one package. would you like to know more about it?"
+            package = packages[0]
+            carrier = package.get('carrier', 'unknown carrier')
+            tracking = package.get('tracking_number', 'no tracking number')
+            compartment = package.get('compartment', 'unknown compartment')
+            
+            speak_output = f"You have one package from {carrier} with tracking number {tracking}, stored in compartment {compartment}. Would you like to know more about it?"
         else:
-            speak_output = f"I understand you have {len(packages)} packages. You can ask me about a specific package's carrier, tracking number, compartment, or when it was delivered."
+            # Group packages by carrier for cleaner presentation
+            carrier_groups = {}
+            for package in packages:
+                carrier = package.get('carrier', 'unknown carrier')
+                if carrier not in carrier_groups:
+                    carrier_groups[carrier] = []
+                carrier_groups[carrier].append(package)
+            
+            # Build description with count per carrier
+            parts = []
+            for carrier, pkgs in carrier_groups.items():
+                if len(pkgs) == 1:
+                    tracking = pkgs[0].get('tracking_number', 'no tracking number')
+                    parts.append(f"one from {carrier} with tracking number {tracking}")
+                else:
+                    # Multiple packages from same carrier
+                    tracking_numbers = [p.get('tracking_number', 'no tracking number') for p in pkgs]
+                    parts.append(f"{len(pkgs)} from {carrier} with tracking numbers {', '.join(tracking_numbers)}")
+            
+            # Join with commas and "and"
+            if len(parts) == 1:
+                package_list = parts[0]
+            elif len(parts) == 2:
+                package_list = f"{parts[0]} and {parts[1]}"
+            else:
+                package_list = ", ".join(parts[:-1]) + f", and {parts[-1]}"
+            
+            speak_output = f"You have {len(packages)} packages: {package_list}. You can ask me about a specific package's carrier, tracking number, compartment, or when it was delivered."
         
         return handler_input.response_builder.speak(speak_output).ask("What would you like to know?").response
-
 
 class CatchAllExceptionHandler(AbstractExceptionHandler):
     def can_handle(self, handler_input, exception):
