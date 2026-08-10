@@ -11,19 +11,16 @@ from ask_sdk_core.skill_builder import SkillBuilder
 from ask_sdk_core.dispatch_components import AbstractRequestHandler, AbstractExceptionHandler
 from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_model import Response
-from ask_sdk_model.ui import SimpleCard
 
 # ============================================
 # LOGGING
 # ============================================
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # ============================================
-# CONFIGURATION - Environment Variables
+# CONFIGURATION
 # ============================================
-
 class Config:
     ALEXA_CLIENT_ID = os.environ.get('ALEXA_CLIENT_ID', '').strip()
     ALEXA_CLIENT_SECRET = os.environ.get('ALEXA_CLIENT_SECRET', '').strip()
@@ -35,7 +32,6 @@ config = Config()
 # ============================================
 # GLOBAL STATE (POC only — resets on restart)
 # ============================================
-
 LATEST_PACKAGES = {}
 CURRENT_UNIT = "4B"
 USER_ID_TO_UNIT = {
@@ -45,7 +41,6 @@ USER_ID_TO_UNIT = {
 # ============================================
 # ALEXA PROACTIVE EVENTS CLIENT
 # ============================================
-
 class AlexaProactiveEventsClient:
     def __init__(self):
         self.client_id = config.ALEXA_CLIENT_ID
@@ -57,7 +52,6 @@ class AlexaProactiveEventsClient:
     def get_token(self) -> Optional[str]:
         if self._cached_token and datetime.utcnow() < self._token_expires_at:
             return self._cached_token
-
         token_url = "https://api.amazon.com/auth/o2/token"
         payload = {
             "grant_type": "client_credentials",
@@ -74,14 +68,13 @@ class AlexaProactiveEventsClient:
                 self._token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in - 300)
                 logger.info(f"Successfully obtained LWA token (expires in {expires_in}s)")
                 return self._cached_token
-
             logger.error(f"Token failed: {response.status_code} - {response.text}")
             return None
         except Exception as e:
             logger.error(f"Token fetch error: {str(e)}")
             return None
 
-    def send_notification(self, alexa_user_id: str, carrier: str, package_id: str, 
+    def send_notification(self, alexa_user_id: str, carrier: str, package_id: str,
                           tracking_number: str = None, compartment: str = None,
                           delivered_at: str = None, unit: str = None) -> Dict:
         token = self.get_token()
@@ -98,41 +91,20 @@ class AlexaProactiveEventsClient:
             "event": {
                 "name": "AMAZON.OrderStatus.Updated",
                 "payload": {
-                    "state": {
-                        "status": "ORDER_DELIVERED",
-                        "deliveredOn": delivered_at or now
-                    },
+                    "state": {"status": "ORDER_DELIVERED", "deliveredOn": delivered_at or now},
                     "order": {
-                        "seller": {
-                            "name": "localizedattribute:sellerName"
-                        },
+                        "seller": {"name": "localizedattribute:sellerName"},
                         "orderId": package_id,
                         "trackingNumber": tracking_number,
-                        "delivery": {
-                            "compartment": compartment or "unknown",
-                            "unit": unit or "unknown"
-                        }
+                        "delivery": {"compartment": compartment or "unknown", "unit": unit or "unknown"}
                     }
                 }
             },
-            "localizedAttributes": [
-                {
-                    "locale": "en-US",
-                    "sellerName": carrier
-                }
-            ],
-            "relevantAudience": {
-                "type": "Unicast",
-                "payload": {
-                    "user": alexa_user_id
-                }
-            }
+            "localizedAttributes": [{"locale": "en-US", "sellerName": carrier}],
+            "relevantAudience": {"type": "Unicast", "payload": {"user": alexa_user_id}}
         }
 
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json"
-        }
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
         logger.info(f"OUTGOING PAYLOAD: {json.dumps(payload)}")
         try:
             response = requests.post(self.api_url, json=payload, headers=headers, timeout=10)
@@ -140,9 +112,8 @@ class AlexaProactiveEventsClient:
                 logger.info(f"Notification successfully sent to {alexa_user_id}")
                 logger.info(f"Amazon Request ID: {response.headers.get('x-amzn-requestid')}")
                 return {"status": "success", "code": 202}
-            else:
-                logger.error(f"Proactive Events API error: {response.status_code} - {response.text}")
-                return {"status": "error", "code": response.status_code, "message": response.text}
+            logger.error(f"Proactive Events API error: {response.status_code} - {response.text}")
+            return {"status": "error", "code": response.status_code, "message": response.text}
         except Exception as e:
             logger.error(f"Send notification error: {str(e)}")
             return {"status": "error", "message": str(e)}
@@ -152,7 +123,6 @@ alexa_client = AlexaProactiveEventsClient()
 # ============================================
 # USER DATA STORE
 # ============================================
-
 def get_user_configuration(unit: str) -> Optional[Dict]:
     active_user_id = os.environ.get('ALEXA_USER_ID', '').strip()
     configs = {
@@ -162,151 +132,161 @@ def get_user_configuration(unit: str) -> Optional[Dict]:
     return configs.get(unit)
 
 # ============================================
-# HELPER FUNCTIONS
+# HELPERS — formatting
 # ============================================
+def format_delivered_date(delivered_at: str) -> str:
+    if not delivered_at:
+        return "recently"
+    try:
+        dt = datetime.fromisoformat(delivered_at.replace('Z', '+00:00'))
+        return dt.strftime('%B %d, %Y at %I:%M %p')
+    except Exception:
+        return delivered_at
 
-def format_package_details(package: Dict, index: int = None) -> str:
-    """Format full package details with optional index"""
+def format_full_details(package: Dict) -> str:
+    carrier = package.get('carrier', 'an unknown carrier')
+    tracking = package.get('tracking_number', 'no tracking number')
+    compartment = package.get('compartment', 'an unknown compartment')
+    delivered_str = format_delivered_date(package.get('delivered_at'))
+    return (f"Your package from {carrier}, tracking number {tracking}, "
+            f"is stored in compartment {compartment}, delivered on {delivered_str}.")
+
+def format_short_line(package: Dict) -> str:
     carrier = package.get('carrier', 'unknown carrier')
     tracking = package.get('tracking_number', 'no tracking number')
-    compartment = package.get('compartment', 'unknown compartment')
-    delivered_at = package.get('delivered_at', 'recently')
-    
-    # Format the delivered date nicely
-    if delivered_at and delivered_at != 'recently':
-        try:
-            dt = datetime.fromisoformat(delivered_at.replace('Z', '+00:00'))
-            delivered_str = dt.strftime('%B %d, %Y at %I:%M %p')
-        except:
-            delivered_str = delivered_at
-    else:
-        delivered_str = 'recently'
-    
-    prefix = f"Package {index + 1}: " if index is not None else ""
-    return f"{prefix}Package from {carrier}, tracking number {tracking}, stored in compartment {compartment}, delivered on {delivered_str}"
+    return f"one from {carrier}, tracking number {tracking}"
 
-def get_package_summary(packages: List[Dict]) -> str:
-    """Get a summary of all packages with their positions"""
+def get_carrier_list_summary(packages: List[Dict]) -> str:
+    """Used on launch — just carrier names, not full details."""
+    carriers = [p.get('carrier', 'unknown') for p in packages]
+    if len(carriers) == 1:
+        return f"You have a package from {carriers[0]}."
+    return f"You have packages from {', '.join(carriers[:-1])} and {carriers[-1]}."
+
+def get_package_status_summary(packages: List[Dict]) -> str:
+    """Used for 'do I have any packages' — carrier + tracking per package."""
     if not packages:
         return "You have no packages right now."
-    
-    total = len(packages)
-    
-    # Build detailed summary with package numbers
-    parts = []
-    for i, p in enumerate(packages, 1):
-        carrier = p.get('carrier', 'unknown')
-        parts.append(f"Package {i} from {carrier}")
-    
-    if total == 1:
-        return f"You have 1 package: {parts[0]}. If you want to know more about this package, just ask me."
-    else:
-        return f"You have {total} packages: {', '.join(parts)}. If you want to know more about any package, just ask me by saying 'tell me about package 1' or 'tell me about the FedEx package'."
+    if len(packages) == 1:
+        return f"You have one package: {format_short_line(packages[0])}. Would you like to know more?"
+    lines = [format_short_line(p) for p in packages]
+    return f"You have {len(packages)} packages: {', '.join(lines)}. Would you like to know more about any of them?"
 
-def find_package_by_carrier(packages: List[Dict], carrier_query: str) -> Optional[Dict]:
-    """Find a package by carrier name (case-insensitive)"""
-    carrier_query = carrier_query.lower().strip()
-    for p in packages:
-        if carrier_query in p.get('carrier', '').lower():
-            return p
-    return None
+# ============================================
+# HELPERS — lookup
+# ============================================
+def find_packages_by_carrier(packages: List[Dict], carrier_query: str) -> List[Dict]:
+    q = carrier_query.lower().strip()
+    return [p for p in packages if q in p.get('carrier', '').lower()]
 
 def find_package_by_tracking(packages: List[Dict], tracking_query: str) -> Optional[Dict]:
-    """Find a package by tracking number (partial match)"""
-    tracking_query = tracking_query.lower().strip()
+    q = tracking_query.lower().strip().replace(" ", "")
     for p in packages:
-        if tracking_query in p.get('tracking_number', '').lower():
+        stored = (p.get('tracking_number') or '').lower().replace(" ", "").replace("-", "")
+        if q.replace("-", "") in stored or stored in q:
             return p
     return None
 
 def find_package_by_position(packages: List[Dict], position: str) -> Optional[Dict]:
-    """Find package by position (first, last, 1st, 2nd, etc.)"""
     position = position.lower().strip()
-    
-    if position in ['first', '1st', '1']:
-        return packages[0] if packages else None
-    elif position in ['second', '2nd', '2']:
-        return packages[1] if len(packages) > 1 else None
-    elif position in ['third', '3rd', '3']:
-        return packages[2] if len(packages) > 2 else None
-    elif position in ['fourth', '4th', '4']:
-        return packages[3] if len(packages) > 3 else None
-    elif position in ['fifth', '5th', '5']:
-        return packages[4] if len(packages) > 4 else None
-    elif position in ['last', 'final']:
-        return packages[-1] if packages else None
-    else:
-        # Try to extract number from position string
+    ordinals = {'first': 0, '1st': 0, '1': 0, 'second': 1, '2nd': 1, '2': 1,
+                'third': 2, '3rd': 2, '3': 2, 'fourth': 3, '4th': 3, '4': 3,
+                'fifth': 4, '5th': 4, '5': 4, 'last': -1, 'final': -1}
+    if position in ordinals:
+        idx = ordinals[position]
         try:
-            import re
-            numbers = re.findall(r'\d+', position)
-            if numbers:
-                idx = int(numbers[0]) - 1
-                if 0 <= idx < len(packages):
-                    return packages[idx]
-        except:
-            pass
+            return packages[idx]
+        except IndexError:
+            return None
+    import re
+    numbers = re.findall(r'\d+', position)
+    if numbers:
+        idx = int(numbers[0]) - 1
+        if 0 <= idx < len(packages):
+            return packages[idx]
     return None
 
-def determine_package_context(handler_input, packages: List[Dict]) -> Optional[Dict]:
-    """Determine which package the user is asking about based on slots and session"""
-    if not packages:
+def get_slot_value(handler_input, slot_name: str) -> Optional[str]:
+    try:
+        slot = handler_input.request_envelope.request.intent.slots.get(slot_name, {})
+        value = slot.get('value')
+        return value.strip() if value else None
+    except Exception:
         return None
-    
+
+# ============================================
+# CORE RESOLVER — single source of truth for "which package?"
+# ============================================
+def resolve_package(handler_input, packages: List[Dict]):
+    """
+    Returns one of:
+      ("resolved", package_dict)      — exactly one package identified
+      ("ambiguous", [package, ...])   — multiple matches, need tracking number to disambiguate
+      ("not_found", None)             — no match at all
+      ("need_selection", None)        — no slot given and more than one package exists
+    """
     session_attr = handler_input.attributes_manager.session_attributes
-    current_package = session_attr.get('current_package')
-    
-    # Check if user specified a carrier
-    try:
-        carrier_slot = handler_input.request_envelope.request.intent.slots.get('carrier', {})
-        if carrier_slot and carrier_slot.get('value'):
-            carrier_value = carrier_slot.get('value', '').strip()
-            if carrier_value:
-                found = find_package_by_carrier(packages, carrier_value)
-                if found:
-                    session_attr['current_package'] = found
-                    return found
-    except:
-        pass
-    
-    # Check if user specified a position (first, second, etc.)
-    try:
-        position_slot = handler_input.request_envelope.request.intent.slots.get('position', {})
-        if position_slot and position_slot.get('value'):
-            position_value = position_slot.get('value', '').strip()
-            if position_value:
-                found = find_package_by_position(packages, position_value)
-                if found:
-                    session_attr['current_package'] = found
-                    return found
-    except:
-        pass
-    
-    # Check if user specified a tracking number
-    try:
-        tracking_slot = handler_input.request_envelope.request.intent.slots.get('tracking', {})
-        if tracking_slot and tracking_slot.get('value'):
-            tracking_value = tracking_slot.get('value', '').strip()
-            if tracking_value:
-                found = find_package_by_tracking(packages, tracking_value)
-                if found:
-                    session_attr['current_package'] = found
-                    return found
-    except:
-        pass
-    
-    # Return current package from session or latest
-    if current_package and current_package in packages:
-        return current_package
-    else:
-        # Default to latest
-        session_attr['current_package'] = packages[-1]
-        return packages[-1]
+
+    if not packages:
+        return ("not_found", None)
+
+    # 1. Tracking number is the most specific — always wins, resolves any pending ambiguity
+    tracking_value = get_slot_value(handler_input, 'tracking')
+    if tracking_value:
+        found = find_package_by_tracking(packages, tracking_value)
+        if found:
+            session_attr['current_package'] = found
+            session_attr.pop('pending_matches', None)
+            return ("resolved", found)
+        return ("not_found", None)
+
+    # 2. If we're mid-disambiguation and the user gives a carrier again, re-check against pending set
+    pending = session_attr.get('pending_matches')
+
+    # 3. Carrier slot
+    carrier_value = get_slot_value(handler_input, 'carrier')
+    if carrier_value:
+        matches = find_packages_by_carrier(packages, carrier_value)
+        if len(matches) == 1:
+            session_attr['current_package'] = matches[0]
+            session_attr.pop('pending_matches', None)
+            return ("resolved", matches[0])
+        elif len(matches) > 1:
+            session_attr['pending_matches'] = matches
+            return ("ambiguous", matches)
+        else:
+            return ("not_found", None)
+
+    # 4. Position slot (first, second, etc.)
+    position_value = get_slot_value(handler_input, 'position')
+    if position_value:
+        found = find_package_by_position(packages, position_value)
+        if found:
+            session_attr['current_package'] = found
+            session_attr.pop('pending_matches', None)
+            return ("resolved", found)
+        return ("not_found", None)
+
+    # 5. No slot given at all — fall back to session context
+    current = session_attr.get('current_package')
+    if current and current in packages:
+        return ("resolved", current)
+
+    if len(packages) == 1:
+        session_attr['current_package'] = packages[0]
+        return ("resolved", packages[0])
+
+    return ("need_selection", None)
+
+def ambiguous_prompt(matches: List[Dict]) -> str:
+    carrier = matches[0].get('carrier', 'that carrier')
+    trackings = [m.get('tracking_number', 'unknown') for m in matches]
+    joined = " or ".join(trackings)
+    return f"You have {len(matches)} packages from {carrier}. Please confirm the tracking number — {joined}?"
 
 # ============================================
 # WEBHOOK HANDLER
 # ============================================
-
 def handle_package_event(event: Dict, context: Any) -> Dict:
     logger.info(f"📦 Webhook event received: {event}")
     data = event.get('data', {})
@@ -323,13 +303,11 @@ def handle_package_event(event: Dict, context: Any) -> Dict:
     user_config = get_user_configuration(unit)
     if not user_config:
         return {"status": "error", "message": f"User unit {unit} not found"}
-
     if not user_config.get('opted_alexa', False):
         return {"status": "skipped", "reason": "User not opted in"}
 
     alexa_user_id = user_config.get('alexa_user_id')
-    
-    # Store full package details
+
     package_info = {
         "package_id": package_id,
         "carrier": carrier,
@@ -338,56 +316,27 @@ def handle_package_event(event: Dict, context: Any) -> Dict:
         "delivered_at": delivered_at,
         "unit": unit
     }
-    
     LATEST_PACKAGES.setdefault(unit, []).append(package_info)
-    logger.info(f"📦 Added package. Total packages for unit {unit}: {len(LATEST_PACKAGES[unit])}")
-
-    debug_info = {
-        "active_alexa_user_id_present": bool(alexa_user_id),
-        "active_alexa_user_id_length": len(alexa_user_id) if alexa_user_id else 0,
-        "active_alexa_user_id_preview": alexa_user_id[:15] + "..." if alexa_user_id else None,
-    }
+    logger.info(f"📦 Added package. Total for unit {unit}: {len(LATEST_PACKAGES[unit])}")
 
     if not alexa_user_id:
-        return {"status": "skipped", "reason": "No Alexa User ID linked", "debug": debug_info}
+        return {"status": "skipped", "reason": "No Alexa User ID linked"}
 
-    logger.info(f"RAW USERID REPR: {repr(alexa_user_id)}")
-
-    # Send notification with all package details
     result = alexa_client.send_notification(
-        alexa_user_id, 
-        carrier, 
-        package_id,
-        tracking_number,
-        compartment,
-        delivered_at,
-        unit
+        alexa_user_id, carrier, package_id, tracking_number, compartment, delivered_at, unit
     )
 
     if result.get('status') == 'success':
-        return {
-            "status": "success",
-            "package_id": package_id,
-            "unit": unit,
-            "message": f"Notification sent for {carrier} package",
-            "debug": debug_info
-        }
-    else:
-        return {
-            "status": "error",
-            "package_id": package_id,
-            "error": result.get('message'),
-            "debug": debug_info
-        }
+        return {"status": "success", "package_id": package_id, "unit": unit,
+                "message": f"Notification sent for {carrier} package"}
+    return {"status": "error", "package_id": package_id, "error": result.get('message')}
 
 # ============================================
 # ALEXA SKILL INTENT & EVENT HANDLERS
 # ============================================
-
 class ProactiveSubscriptionChangedHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
         return ask_utils.is_request_type("AlexaSkillEvent.ProactiveSubscriptionChanged")(handler_input)
-
     def handle(self, handler_input):
         user_id = handler_input.request_envelope.context.system.user.user_id
         logger.info(f"✅ SUBSCRIPTION EVENT RECEIVED for user: {user_id}")
@@ -406,9 +355,9 @@ class LaunchRequestHandler(AbstractRequestHandler):
 
         packages = LATEST_PACKAGES.get(CURRENT_UNIT, [])
         if packages:
-            speak_output = get_package_summary(packages)
+            speak_output = "Welcome, your account is connected. " + get_carrier_list_summary(packages)
         else:
-            speak_output = "Welcome to Notifii Alert. Your account is connected for package updates. You have no packages at the moment."
+            speak_output = "Welcome, your account is connected."
 
         return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
 
@@ -419,38 +368,52 @@ class PackageStatusIntentHandler(AbstractRequestHandler):
 
     def handle(self, handler_input):
         packages = LATEST_PACKAGES.get(CURRENT_UNIT, [])
-        if not packages:
-            speak_output = "You have no packages right now."
-            return handler_input.response_builder.speak(speak_output).response
-        
-        speak_output = get_package_summary(packages)
-        return handler_input.response_builder.speak(speak_output).ask("Which package would you like to know more about?").response
+        speak_output = get_package_status_summary(packages)
+        if packages:
+            return handler_input.response_builder.speak(speak_output).ask("Which package would you like to know more about?").response
+        return handler_input.response_builder.speak(speak_output).response
 
 
 class PackageDetailsIntentHandler(AbstractRequestHandler):
+    """Handles: 'give me more details about the FedEx package'"""
     def can_handle(self, handler_input):
         return ask_utils.is_intent_name("PackageDetailsIntent")(handler_input)
 
     def handle(self, handler_input):
         packages = LATEST_PACKAGES.get(CURRENT_UNIT, [])
-        if not packages:
-            speak_output = "You have no packages to get details about."
-            return handler_input.response_builder.speak(speak_output).response
-        
-        # Determine which package the user is asking about
-        selected_package = determine_package_context(handler_input, packages)
-        
-        if selected_package:
-            # Find the index of the selected package
-            try:
-                index = packages.index(selected_package)
-                speak_output = format_package_details(selected_package, index)
-            except ValueError:
-                speak_output = format_package_details(selected_package)
+        status, result = resolve_package(handler_input, packages)
+
+        if status == "resolved":
+            speak_output = format_full_details(result)
+            return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
+        elif status == "ambiguous":
+            speak_output = ambiguous_prompt(result)
+            return handler_input.response_builder.speak(speak_output).ask("Which tracking number?").response
+        elif status == "need_selection":
+            speak_output = "Which package would you like to know about — you can say the carrier name."
+            return handler_input.response_builder.speak(speak_output).ask(speak_output).response
         else:
-            speak_output = "I couldn't find that package. You can ask about a specific package by saying 'tell me about the FedEx package' or 'tell me about package 2'."
-        
-        return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else about this package?").response
+            speak_output = "I couldn't find a package matching that. You have no packages right now." if not packages else "I couldn't find that package. Try saying the carrier name."
+            return handler_input.response_builder.speak(speak_output).response
+
+
+class TrackingNumberIntentHandler(AbstractRequestHandler):
+    """Handles bare replies like '8888' when disambiguating."""
+    def can_handle(self, handler_input):
+        return ask_utils.is_intent_name("TrackingNumberIntent")(handler_input)
+
+    def handle(self, handler_input):
+        packages = LATEST_PACKAGES.get(CURRENT_UNIT, [])
+        status, result = resolve_package(handler_input, packages)
+
+        if status == "resolved":
+            speak_output = format_full_details(result)
+        elif status == "not_found":
+            speak_output = "I couldn't find a package with that tracking number. Could you say it again?"
+        else:
+            speak_output = "I didn't catch a tracking number. Could you repeat it?"
+
+        return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
 
 
 class CarrierInquiryIntentHandler(AbstractRequestHandler):
@@ -459,73 +422,15 @@ class CarrierInquiryIntentHandler(AbstractRequestHandler):
 
     def handle(self, handler_input):
         packages = LATEST_PACKAGES.get(CURRENT_UNIT, [])
-        if not packages:
-            speak_output = "You have no packages to inquire about."
-            return handler_input.response_builder.speak(speak_output).response
-        
-        # Determine which package the user is asking about
-        selected_package = determine_package_context(handler_input, packages)
-        
-        if selected_package:
-            carrier = selected_package.get('carrier', 'unknown carrier')
-            speak_output = f"This package was delivered by {carrier}."
+        status, result = resolve_package(handler_input, packages)
+        if status == "resolved":
+            speak_output = f"This package was delivered by {result.get('carrier', 'an unknown carrier')}."
+        elif status == "ambiguous":
+            speak_output = ambiguous_prompt(result)
         else:
-            speak_output = "I couldn't find that package. Please specify which package you're asking about."
-        
-        return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
+            speak_output = "I couldn't find that package. Please specify the carrier."
+        return handler_input.response_builder.speak(speak_output).ask("Anything else?").response
 
-def find_packages_by_carrier(packages: List[Dict], carrier_query: str) -> List[Dict]:
-    """Return ALL matches, not just the first"""
-    carrier_query = carrier_query.lower().strip()
-    return [p for p in packages if carrier_query in p.get('carrier', '').lower()]
-
-def determine_package_context(handler_input, packages: List[Dict]):
-    """Returns either a single package dict, or a dict signaling ambiguity"""
-    session_attr = handler_input.attributes_manager.session_attributes
-    current_package = session_attr.get('current_package')
-
-    # Tracking number — most specific, check first
-    try:
-        tracking_slot = handler_input.request_envelope.request.intent.slots.get('tracking', {})
-        if tracking_slot and tracking_slot.get('value'):
-            found = find_package_by_tracking(packages, tracking_slot['value'].strip())
-            if found:
-                session_attr['current_package'] = found
-                return found
-    except Exception:
-        pass
-
-    # Carrier — check for AMBIGUITY now
-    try:
-        carrier_slot = handler_input.request_envelope.request.intent.slots.get('carrier', {})
-        if carrier_slot and carrier_slot.get('value'):
-            matches = find_packages_by_carrier(packages, carrier_slot['value'].strip())
-            if len(matches) == 1:
-                session_attr['current_package'] = matches[0]
-                return matches[0]
-            elif len(matches) > 1:
-                # Ambiguous — signal caller to ask for tracking number
-                session_attr['awaiting_tracking_disambiguation'] = True
-                return {"_ambiguous": True, "matches": matches}
-    except Exception:
-        pass
-
-    # Position (first, second, etc.)
-    try:
-        position_slot = handler_input.request_envelope.request.intent.slots.get('position', {})
-        if position_slot and position_slot.get('value'):
-            found = find_package_by_position(packages, position_slot['value'].strip())
-            if found:
-                session_attr['current_package'] = found
-                return found
-    except Exception:
-        pass
-
-    if current_package and current_package in packages:
-        return current_package
-    else:
-        session_attr['current_package'] = packages[-1]
-        return packages[-1]
 
 class TrackingInquiryIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
@@ -533,23 +438,15 @@ class TrackingInquiryIntentHandler(AbstractRequestHandler):
 
     def handle(self, handler_input):
         packages = LATEST_PACKAGES.get(CURRENT_UNIT, [])
-        if not packages:
-            return handler_input.response_builder.speak("You have no packages to inquire about.").response
-
-        selected_package = determine_package_context(handler_input, packages)
-
-        if isinstance(selected_package, dict) and selected_package.get("_ambiguous"):
-            trackings = [p.get('tracking_number', 'unknown') for p in selected_package["matches"]]
-            speak_output = f"You have {len(trackings)} packages from that carrier. Which tracking number would you like — {' or '.join(trackings)}?"
-            return handler_input.response_builder.speak(speak_output).ask("Which tracking number?").response
-
-        if selected_package:
-            tracking = selected_package.get('tracking_number', 'no tracking number available')
-            speak_output = f"The tracking number is {tracking}."
+        status, result = resolve_package(handler_input, packages)
+        if status == "resolved":
+            speak_output = f"The tracking number is {result.get('tracking_number', 'not available')}."
+        elif status == "ambiguous":
+            speak_output = ambiguous_prompt(result)
         else:
-            speak_output = "I couldn't find that package."
+            speak_output = "I couldn't find that package. Please specify the carrier or tracking number."
+        return handler_input.response_builder.speak(speak_output).ask("Anything else?").response
 
-        return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
 
 class CompartmentInquiryIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
@@ -557,20 +454,14 @@ class CompartmentInquiryIntentHandler(AbstractRequestHandler):
 
     def handle(self, handler_input):
         packages = LATEST_PACKAGES.get(CURRENT_UNIT, [])
-        if not packages:
-            speak_output = "You have no packages to inquire about."
-            return handler_input.response_builder.speak(speak_output).response
-        
-        # Determine which package the user is asking about
-        selected_package = determine_package_context(handler_input, packages)
-        
-        if selected_package:
-            compartment = selected_package.get('compartment', 'unknown compartment')
-            speak_output = f"This package is stored in compartment {compartment}."
+        status, result = resolve_package(handler_input, packages)
+        if status == "resolved":
+            speak_output = f"This package is stored in compartment {result.get('compartment', 'unknown')}."
+        elif status == "ambiguous":
+            speak_output = ambiguous_prompt(result)
         else:
-            speak_output = "I couldn't find that package. Please specify which package you're asking about."
-        
-        return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
+            speak_output = "I couldn't find that package. Please specify the carrier or tracking number."
+        return handler_input.response_builder.speak(speak_output).ask("Anything else?").response
 
 
 class DeliveryInquiryIntentHandler(AbstractRequestHandler):
@@ -579,58 +470,39 @@ class DeliveryInquiryIntentHandler(AbstractRequestHandler):
 
     def handle(self, handler_input):
         packages = LATEST_PACKAGES.get(CURRENT_UNIT, [])
-        if not packages:
-            speak_output = "You have no packages to inquire about."
-            return handler_input.response_builder.speak(speak_output).response
-        
-        # Determine which package the user is asking about
-        selected_package = determine_package_context(handler_input, packages)
-        
-        if selected_package:
-            delivered_at = selected_package.get('delivered_at', 'recently')
-            if delivered_at and delivered_at != 'recently':
-                try:
-                    dt = datetime.fromisoformat(delivered_at.replace('Z', '+00:00'))
-                    delivered_str = dt.strftime('%B %d, %Y at %I:%M %p')
-                except:
-                    delivered_str = delivered_at
-            else:
-                delivered_str = 'recently'
-            speak_output = f"This package was delivered on {delivered_str}."
+        status, result = resolve_package(handler_input, packages)
+        if status == "resolved":
+            speak_output = f"This package was delivered on {format_delivered_date(result.get('delivered_at'))}."
+        elif status == "ambiguous":
+            speak_output = ambiguous_prompt(result)
         else:
-            speak_output = "I couldn't find that package. Please specify which package you're asking about."
-        
-        return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
+            speak_output = "I couldn't find that package. Please specify the carrier or tracking number."
+        return handler_input.response_builder.speak(speak_output).ask("Anything else?").response
 
 
 class ExitIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
         return ask_utils.is_intent_name("ExitIntent")(handler_input)
-
     def handle(self, handler_input):
-        speak_output = "Goodbye! Have a great day."
-        return handler_input.response_builder.speak(speak_output).set_should_end_session(True).response
+        return handler_input.response_builder.speak("Goodbye! Have a great day.").set_should_end_session(True).response
 
 
 class HelpIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
         return ask_utils.is_intent_name("AMAZON.HelpIntent")(handler_input)
-
     def handle(self, handler_input):
-        speak_output = "You can ask me about your packages. For example, you can say 'what packages do I have?', 'tell me about the FedEx package', 'tell me about package 2', or ask for specific details like carrier, tracking number, compartment, or delivery date."
+        speak_output = ("You can ask 'do I have any packages', then ask about a specific carrier "
+                         "like 'tell me about the FedEx package'. If you have more than one from the "
+                         "same carrier, I'll ask you to confirm the tracking number.")
         return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
 
 
 class CancelAndStopIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
-        return (
-            ask_utils.is_intent_name("AMAZON.CancelIntent")(handler_input) or
-            ask_utils.is_intent_name("AMAZON.StopIntent")(handler_input)
-        )
-
+        return (ask_utils.is_intent_name("AMAZON.CancelIntent")(handler_input) or
+                ask_utils.is_intent_name("AMAZON.StopIntent")(handler_input))
     def handle(self, handler_input):
-        speak_output = "Goodbye! Have a great day."
-        return handler_input.response_builder.speak(speak_output).set_should_end_session(True).response
+        return handler_input.response_builder.speak("Goodbye! Have a great day.").set_should_end_session(True).response
 
 
 class FallbackIntentHandler(AbstractRequestHandler):
@@ -639,57 +511,45 @@ class FallbackIntentHandler(AbstractRequestHandler):
 
     def handle(self, handler_input):
         packages = LATEST_PACKAGES.get(CURRENT_UNIT, [])
-        
-        if not packages:
-            speak_output = "You have no packages right now. Would you like to know anything else?"
-            return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
-        
-        if len(packages) == 1:
-            speak_output = "I understand you have one package. You can ask about its carrier, tracking number, compartment, or when it was delivered. Just say 'tell me about my package' or ask a specific question."
+        session_attr = handler_input.attributes_manager.session_attributes
+
+        if session_attr.get('pending_matches'):
+            speak_output = "Sorry, I didn't catch that. Please say the tracking number."
+        elif not packages:
+            speak_output = "You have no packages right now."
         else:
-            # List all packages with their positions
-            parts = []
-            for i, p in enumerate(packages, 1):
-                parts.append(f"Package {i} from {p.get('carrier', 'unknown')}")
-            speak_output = f"I understand you have {len(packages)} packages: {', '.join(parts)}. You can ask about a specific package by saying 'tell me about package 1' or 'tell me about the FedEx package'."
-        
+            speak_output = get_package_status_summary(packages)
+
         return handler_input.response_builder.speak(speak_output).ask("What would you like to know?").response
 
 
 class CatchAllExceptionHandler(AbstractExceptionHandler):
     def can_handle(self, handler_input, exception):
         return True
-
     def handle(self, handler_input, exception):
         logger.error(f"Error handling request: {exception}", exc_info=True)
-        speak_output = "Sorry, I had trouble processing your request. Please try again."
-        return handler_input.response_builder.speak(speak_output).response
+        return handler_input.response_builder.speak("Sorry, I had trouble processing your request. Please try again.").response
 
 
 class SkillPermissionChangedHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
         return ask_utils.is_request_type("AlexaSkillEvent.SkillPermissionChanged")(handler_input)
-
     def handle(self, handler_input):
         logger.info("Permission Changed")
-        logger.info(json.dumps(handler_input.request_envelope.to_dict(), indent=2))
         return handler_input.response_builder.response
 
 
 class SkillDisabledHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
         return ask_utils.is_request_type("AlexaSkillEvent.SkillDisabled")(handler_input)
-
     def handle(self, handler_input):
         logger.info("Skill Disabled")
-        logger.info(json.dumps(handler_input.request_envelope.to_dict(), indent=2))
         return handler_input.response_builder.response
 
 
 class SessionEndedRequestHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
         return ask_utils.is_request_type("SessionEndedRequest")(handler_input)
-
     def handle(self, handler_input):
         logger.info("Session ended")
         return handler_input.response_builder.response
@@ -697,7 +557,6 @@ class SessionEndedRequestHandler(AbstractRequestHandler):
 # ============================================
 # SKILL BUILDER REGISTRATION
 # ============================================
-
 sb = SkillBuilder()
 sb.add_request_handler(SkillPermissionChangedHandler())
 sb.add_request_handler(SkillDisabledHandler())
@@ -706,6 +565,7 @@ sb.add_request_handler(ProactiveSubscriptionChangedHandler())
 sb.add_request_handler(LaunchRequestHandler())
 sb.add_request_handler(PackageStatusIntentHandler())
 sb.add_request_handler(PackageDetailsIntentHandler())
+sb.add_request_handler(TrackingNumberIntentHandler())
 sb.add_request_handler(CarrierInquiryIntentHandler())
 sb.add_request_handler(TrackingInquiryIntentHandler())
 sb.add_request_handler(CompartmentInquiryIntentHandler())
@@ -714,7 +574,6 @@ sb.add_request_handler(ExitIntentHandler())
 sb.add_request_handler(HelpIntentHandler())
 sb.add_request_handler(CancelAndStopIntentHandler())
 sb.add_request_handler(FallbackIntentHandler())
-
 sb.add_exception_handler(CatchAllExceptionHandler())
 
 lambda_handler = sb.lambda_handler()

@@ -31,7 +31,10 @@
             "what packages do i have",
             "any packages for me",
             "package status",
-            "list my packages"
+            "list my packages",
+            "do i have any notifications",
+            "do i have any packages",
+            "do i have any notifications or packages"
           ]
         },
         {
@@ -147,6 +150,22 @@
             "when did it arrive",
             "delivery time for {carrier}",
             "when was package {position} delivered"
+          ]
+        },
+        {
+          "name": "TrackingNumberIntent",
+          "slots": [
+            {
+              "name": "tracking",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "{tracking}",
+            "tracking number {tracking}",
+            "it's {tracking}",
+            "the tracking number is {tracking}",
+            "number {tracking}"
           ]
         },
         {
