@@ -13,9 +13,9 @@
             "list my packages",
             "package update",
             "any packages for me",
-            "are there any packages",
-            "check packages",
-            "my packages"
+            "do i have any notifications",
+            "any notifications",
+            "check notifications"
           ]
         },
         {
@@ -29,9 +29,27 @@
             "tell me more",
             "details",
             "tell me about the package",
-            "tell me about {carrier}",
-            "details about {carrier}",
-            "information about {carrier}"
+            "give me more details",
+            "more details"
+          ],
+          "slots": [
+            {
+              "name": "carrier",
+              "type": "AMAZON.SearchQuery"
+            }
+          ]
+        },
+        {
+          "name": "WhichPackageIntent",
+          "samples": [
+            "{carrier}",
+            "the {carrier} package",
+            "package from {carrier}",
+            "the {carrier} one",
+            "the tracking number {carrier}",
+            "the one from {carrier}",
+            "{carrier} package",
+            "about {carrier}"
           ],
           "slots": [
             {
