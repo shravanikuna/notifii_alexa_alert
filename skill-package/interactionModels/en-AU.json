@@ -42,10 +42,6 @@
               "type": "AMAZON.SearchQuery"
             },
             {
-              "name": "position",
-              "type": "AMAZON.SearchQuery"
-            },
-            {
               "name": "tracking",
               "type": "AMAZON.SearchQuery"
             }
@@ -56,9 +52,23 @@
             "more information about {carrier}",
             "tell me about {carrier} package",
             "details for {carrier}",
-            "tell me about package {position}",
-            "tell me about the {position} package",
-            "details for package {position}"
+            "tell me about tracking number {tracking}",
+            "details for tracking {tracking}"
+          ]
+        },
+        {
+          "name": "TrackingNumberIntent",
+          "slots": [
+            {
+              "name": "tracking",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "tracking number {tracking}",
+            "tracking {tracking}",
+            "number {tracking}",
+            "the tracking number is {tracking}"
           ]
         },
         {
@@ -67,18 +77,13 @@
             {
               "name": "carrier",
               "type": "AMAZON.SearchQuery"
-            },
-            {
-              "name": "position",
-              "type": "AMAZON.SearchQuery"
             }
           ],
           "samples": [
-            "what carrier",
+            "what carrier delivered it",
             "who delivered it",
             "which delivery service",
-            "carrier for {carrier}",
-            "what carrier for package {position}"
+            "carrier for {carrier}"
           ]
         },
         {
@@ -87,25 +92,13 @@
             {
               "name": "carrier",
               "type": "AMAZON.SearchQuery"
-            },
-            {
-              "name": "position",
-              "type": "AMAZON.SearchQuery"
-            },
-            {
-              "name": "tracking",
-              "type": "AMAZON.SearchQuery"
             }
           ],
           "samples": [
-            "what's the tracking number",
-            "give me tracking",
+            "what is the tracking number",
+            "give me tracking number",
             "tracking number please",
-            "tracking for {carrier}",
-            "what carrier for package {position}",
-            "tell me about tracking {tracking}",
-            "package with tracking number {tracking}",
-            "tracking number {tracking}"
+            "tracking for {carrier}"
           ]
         },
         {
@@ -114,18 +107,13 @@
             {
               "name": "carrier",
               "type": "AMAZON.SearchQuery"
-            },
-            {
-              "name": "position",
-              "type": "AMAZON.SearchQuery"
             }
           ],
           "samples": [
             "which compartment",
             "where is it stored",
             "what compartment",
-            "which locker for {carrier}",
-            "compartment for package {position}"
+            "which locker for {carrier}"
           ]
         },
         {
@@ -134,19 +122,13 @@
             {
               "name": "carrier",
               "type": "AMAZON.SearchQuery"
-            },
-            {
-              "name": "position",
-              "type": "AMAZON.SearchQuery"
             }
           ],
           "samples": [
             "when was it delivered",
             "delivery date",
             "what time",
-            "when did it arrive",
-            "delivery time for {carrier}",
-            "when was package {position} delivered"
+            "delivery time for {carrier}"
           ]
         },
         {

@@ -187,25 +187,6 @@ def find_package_by_tracking(packages: List[Dict], tracking_query: str) -> Optio
             return p
     return None
 
-def find_package_by_position(packages: List[Dict], position: str) -> Optional[Dict]:
-    position = position.lower().strip()
-    ordinals = {'first': 0, '1st': 0, '1': 0, 'second': 1, '2nd': 1, '2': 1,
-                'third': 2, '3rd': 2, '3': 2, 'fourth': 3, '4th': 3, '4': 3,
-                'fifth': 4, '5th': 4, '5': 4, 'last': -1, 'final': -1}
-    if position in ordinals:
-        idx = ordinals[position]
-        try:
-            return packages[idx]
-        except IndexError:
-            return None
-    import re
-    numbers = re.findall(r'\d+', position)
-    if numbers:
-        idx = int(numbers[0]) - 1
-        if 0 <= idx < len(packages):
-            return packages[idx]
-    return None
-
 def get_slot_value(handler_input, slot_name: str) -> Optional[str]:
     try:
         slot = handler_input.request_envelope.request.intent.slots.get(slot_name, {})
@@ -240,10 +221,7 @@ def resolve_package(handler_input, packages: List[Dict]):
             return ("resolved", found)
         return ("not_found", None)
 
-    # 2. If we're mid-disambiguation and the user gives a carrier again, re-check against pending set
-    pending = session_attr.get('pending_matches')
-
-    # 3. Carrier slot
+    # 2. Carrier slot
     carrier_value = get_slot_value(handler_input, 'carrier')
     if carrier_value:
         matches = find_packages_by_carrier(packages, carrier_value)
@@ -257,17 +235,7 @@ def resolve_package(handler_input, packages: List[Dict]):
         else:
             return ("not_found", None)
 
-    # 4. Position slot (first, second, etc.)
-    position_value = get_slot_value(handler_input, 'position')
-    if position_value:
-        found = find_package_by_position(packages, position_value)
-        if found:
-            session_attr['current_package'] = found
-            session_attr.pop('pending_matches', None)
-            return ("resolved", found)
-        return ("not_found", None)
-
-    # 5. No slot given at all — fall back to session context
+    # 3. No slot given at all — fall back to session context
     current = session_attr.get('current_package')
     if current and current in packages:
         return ("resolved", current)
@@ -398,7 +366,7 @@ class PackageDetailsIntentHandler(AbstractRequestHandler):
 
 
 class TrackingNumberIntentHandler(AbstractRequestHandler):
-    """Handles bare replies like '8888' when disambiguating."""
+    """Handles replies like '8888' when disambiguating."""
     def can_handle(self, handler_input):
         return ask_utils.is_intent_name("TrackingNumberIntent")(handler_input)
 
