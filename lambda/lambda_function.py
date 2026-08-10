@@ -165,8 +165,8 @@ def get_user_configuration(unit: str) -> Optional[Dict]:
 # HELPER FUNCTIONS
 # ============================================
 
-def format_package_details(package: Dict) -> str:
-    """Format full package details"""
+def format_package_details(package: Dict, index: int = None) -> str:
+    """Format full package details with optional index"""
     carrier = package.get('carrier', 'unknown carrier')
     tracking = package.get('tracking_number', 'no tracking number')
     compartment = package.get('compartment', 'unknown compartment')
@@ -182,34 +182,30 @@ def format_package_details(package: Dict) -> str:
     else:
         delivered_str = 'recently'
     
-    return f"Package from {carrier}, tracking number {tracking}, stored in compartment {compartment}, delivered on {delivered_str}"
+    prefix = f"Package {index + 1}: " if index is not None else ""
+    return f"{prefix}Package from {carrier}, tracking number {tracking}, stored in compartment {compartment}, delivered on {delivered_str}"
 
 def get_package_summary(packages: List[Dict]) -> str:
-    """Get a summary of all packages"""
+    """Get a summary of all packages with their positions"""
     if not packages:
         return "You have no packages right now."
     
     total = len(packages)
     
-    # Group by carrier for cleaner summary
-    carrier_counts = {}
-    for p in packages:
-        carrier = p.get('carrier', 'unknown')
-        carrier_counts[carrier] = carrier_counts.get(carrier, 0) + 1
-    
-    # Build the summary
+    # Build detailed summary with package numbers
     parts = []
-    for carrier, count in carrier_counts.items():
-        parts.append(f"{count} from {carrier}")
+    for i, p in enumerate(packages, 1):
+        carrier = p.get('carrier', 'unknown')
+        parts.append(f"Package {i} from {carrier}")
     
     if total == 1:
-        return f"You have 1 package: {', '.join(parts)}. If you want to know more about this package, just ask me."
+        return f"You have 1 package: {parts[0]}. If you want to know more about this package, just ask me."
     else:
-        return f"You have {total} packages: {', '.join(parts)}. If you want to know more about any package, just ask me."
+        return f"You have {total} packages: {', '.join(parts)}. If you want to know more about any package, just ask me by saying 'tell me about package 1' or 'tell me about the FedEx package'."
 
 def find_package_by_carrier(packages: List[Dict], carrier_query: str) -> Optional[Dict]:
     """Find a package by carrier name (case-insensitive)"""
-    carrier_query = carrier_query.lower()
+    carrier_query = carrier_query.lower().strip()
     for p in packages:
         if carrier_query in p.get('carrier', '').lower():
             return p
@@ -217,11 +213,95 @@ def find_package_by_carrier(packages: List[Dict], carrier_query: str) -> Optiona
 
 def find_package_by_tracking(packages: List[Dict], tracking_query: str) -> Optional[Dict]:
     """Find a package by tracking number (partial match)"""
-    tracking_query = tracking_query.lower()
+    tracking_query = tracking_query.lower().strip()
     for p in packages:
         if tracking_query in p.get('tracking_number', '').lower():
             return p
     return None
+
+def find_package_by_position(packages: List[Dict], position: str) -> Optional[Dict]:
+    """Find package by position (first, last, 1st, 2nd, etc.)"""
+    position = position.lower().strip()
+    
+    if position in ['first', '1st', '1']:
+        return packages[0] if packages else None
+    elif position in ['second', '2nd', '2']:
+        return packages[1] if len(packages) > 1 else None
+    elif position in ['third', '3rd', '3']:
+        return packages[2] if len(packages) > 2 else None
+    elif position in ['fourth', '4th', '4']:
+        return packages[3] if len(packages) > 3 else None
+    elif position in ['fifth', '5th', '5']:
+        return packages[4] if len(packages) > 4 else None
+    elif position in ['last', 'final']:
+        return packages[-1] if packages else None
+    else:
+        # Try to extract number from position string
+        try:
+            import re
+            numbers = re.findall(r'\d+', position)
+            if numbers:
+                idx = int(numbers[0]) - 1
+                if 0 <= idx < len(packages):
+                    return packages[idx]
+        except:
+            pass
+    return None
+
+def determine_package_context(handler_input, packages: List[Dict]) -> Optional[Dict]:
+    """Determine which package the user is asking about based on slots and session"""
+    if not packages:
+        return None
+    
+    session_attr = handler_input.attributes_manager.session_attributes
+    current_package = session_attr.get('current_package')
+    
+    # Check if user specified a carrier
+    try:
+        carrier_slot = handler_input.request_envelope.request.intent.slots.get('carrier', {})
+        if carrier_slot and carrier_slot.get('value'):
+            carrier_value = carrier_slot.get('value', '').strip()
+            if carrier_value:
+                found = find_package_by_carrier(packages, carrier_value)
+                if found:
+                    session_attr['current_package'] = found
+                    return found
+    except:
+        pass
+    
+    # Check if user specified a position (first, second, etc.)
+    try:
+        position_slot = handler_input.request_envelope.request.intent.slots.get('position', {})
+        if position_slot and position_slot.get('value'):
+            position_value = position_slot.get('value', '').strip()
+            if position_value:
+                found = find_package_by_position(packages, position_value)
+                if found:
+                    session_attr['current_package'] = found
+                    return found
+    except:
+        pass
+    
+    # Check if user specified a tracking number
+    try:
+        tracking_slot = handler_input.request_envelope.request.intent.slots.get('tracking', {})
+        if tracking_slot and tracking_slot.get('value'):
+            tracking_value = tracking_slot.get('value', '').strip()
+            if tracking_value:
+                found = find_package_by_tracking(packages, tracking_value)
+                if found:
+                    session_attr['current_package'] = found
+                    return found
+    except:
+        pass
+    
+    # Return current package from session or latest
+    if current_package and current_package in packages:
+        return current_package
+    else:
+        # Default to latest
+        session_attr['current_package'] = packages[-1]
+        return packages[-1]
 
 # ============================================
 # WEBHOOK HANDLER
@@ -344,7 +424,7 @@ class PackageStatusIntentHandler(AbstractRequestHandler):
             return handler_input.response_builder.speak(speak_output).response
         
         speak_output = get_package_summary(packages)
-        return handler_input.response_builder.speak(speak_output).ask("Would you like details about any package?").response
+        return handler_input.response_builder.speak(speak_output).ask("Which package would you like to know more about?").response
 
 
 class PackageDetailsIntentHandler(AbstractRequestHandler):
@@ -357,37 +437,18 @@ class PackageDetailsIntentHandler(AbstractRequestHandler):
             speak_output = "You have no packages to get details about."
             return handler_input.response_builder.speak(speak_output).response
         
-        # Get carrier from slot if available
-        try:
-            carrier_slot = handler_input.request_envelope.request.intent.slots.get('carrier', {})
-            carrier_value = carrier_slot.get('value', '').lower() if carrier_slot else ''
-            logger.info(f"Carrier slot value: {carrier_value}")
-        except:
-            carrier_value = ''
+        # Determine which package the user is asking about
+        selected_package = determine_package_context(handler_input, packages)
         
-        # Find specific package by carrier
-        if carrier_value:
-            # Try to find package by carrier
-            found_package = None
-            for p in packages:
-                if carrier_value in p.get('carrier', '').lower():
-                    found_package = p
-                    break
-            
-            if found_package:
-                speak_output = format_package_details(found_package)
-                # Store in session
-                session_attr = handler_input.attributes_manager.session_attributes
-                session_attr['current_package'] = found_package
-                return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else about this package?").response
-        
-        # If no specific package found or no carrier specified, get latest
-        latest_package = packages[-1]
-        speak_output = format_package_details(latest_package)
-        
-        # Store the package in session for follow-up questions
-        session_attr = handler_input.attributes_manager.session_attributes
-        session_attr['current_package'] = latest_package
+        if selected_package:
+            # Find the index of the selected package
+            try:
+                index = packages.index(selected_package)
+                speak_output = format_package_details(selected_package, index)
+            except ValueError:
+                speak_output = format_package_details(selected_package)
+        else:
+            speak_output = "I couldn't find that package. You can ask about a specific package by saying 'tell me about the FedEx package' or 'tell me about package 2'."
         
         return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else about this package?").response
 
@@ -402,12 +463,14 @@ class CarrierInquiryIntentHandler(AbstractRequestHandler):
             speak_output = "You have no packages to inquire about."
             return handler_input.response_builder.speak(speak_output).response
         
-        # Get from session or latest
-        session_attr = handler_input.attributes_manager.session_attributes
-        package = session_attr.get('current_package', packages[-1])
+        # Determine which package the user is asking about
+        selected_package = determine_package_context(handler_input, packages)
         
-        carrier = package.get('carrier', 'unknown carrier')
-        speak_output = f"This package was delivered by {carrier}."
+        if selected_package:
+            carrier = selected_package.get('carrier', 'unknown carrier')
+            speak_output = f"This package was delivered by {carrier}."
+        else:
+            speak_output = "I couldn't find that package. Please specify which package you're asking about."
         
         return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
 
@@ -422,12 +485,14 @@ class TrackingInquiryIntentHandler(AbstractRequestHandler):
             speak_output = "You have no packages to inquire about."
             return handler_input.response_builder.speak(speak_output).response
         
-        # Get from session or latest
-        session_attr = handler_input.attributes_manager.session_attributes
-        package = session_attr.get('current_package', packages[-1])
+        # Determine which package the user is asking about
+        selected_package = determine_package_context(handler_input, packages)
         
-        tracking = package.get('tracking_number', 'no tracking number available')
-        speak_output = f"The tracking number is {tracking}."
+        if selected_package:
+            tracking = selected_package.get('tracking_number', 'no tracking number available')
+            speak_output = f"The tracking number is {tracking}."
+        else:
+            speak_output = "I couldn't find that package. Please specify which package you're asking about."
         
         return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
 
@@ -442,12 +507,14 @@ class CompartmentInquiryIntentHandler(AbstractRequestHandler):
             speak_output = "You have no packages to inquire about."
             return handler_input.response_builder.speak(speak_output).response
         
-        # Get from session or latest
-        session_attr = handler_input.attributes_manager.session_attributes
-        package = session_attr.get('current_package', packages[-1])
+        # Determine which package the user is asking about
+        selected_package = determine_package_context(handler_input, packages)
         
-        compartment = package.get('compartment', 'unknown compartment')
-        speak_output = f"This package is stored in compartment {compartment}."
+        if selected_package:
+            compartment = selected_package.get('compartment', 'unknown compartment')
+            speak_output = f"This package is stored in compartment {compartment}."
+        else:
+            speak_output = "I couldn't find that package. Please specify which package you're asking about."
         
         return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
 
@@ -462,21 +529,22 @@ class DeliveryInquiryIntentHandler(AbstractRequestHandler):
             speak_output = "You have no packages to inquire about."
             return handler_input.response_builder.speak(speak_output).response
         
-        # Get from session or latest
-        session_attr = handler_input.attributes_manager.session_attributes
-        package = session_attr.get('current_package', packages[-1])
+        # Determine which package the user is asking about
+        selected_package = determine_package_context(handler_input, packages)
         
-        delivered_at = package.get('delivered_at', 'recently')
-        if delivered_at and delivered_at != 'recently':
-            try:
-                dt = datetime.fromisoformat(delivered_at.replace('Z', '+00:00'))
-                delivered_str = dt.strftime('%B %d, %Y at %I:%M %p')
-            except:
-                delivered_str = delivered_at
+        if selected_package:
+            delivered_at = selected_package.get('delivered_at', 'recently')
+            if delivered_at and delivered_at != 'recently':
+                try:
+                    dt = datetime.fromisoformat(delivered_at.replace('Z', '+00:00'))
+                    delivered_str = dt.strftime('%B %d, %Y at %I:%M %p')
+                except:
+                    delivered_str = delivered_at
+            else:
+                delivered_str = 'recently'
+            speak_output = f"This package was delivered on {delivered_str}."
         else:
-            delivered_str = 'recently'
-        
-        speak_output = f"This package was delivered on {delivered_str}."
+            speak_output = "I couldn't find that package. Please specify which package you're asking about."
         
         return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
 
@@ -495,7 +563,7 @@ class HelpIntentHandler(AbstractRequestHandler):
         return ask_utils.is_intent_name("AMAZON.HelpIntent")(handler_input)
 
     def handle(self, handler_input):
-        speak_output = "You can ask me about your packages. For example, specific details like carrier, tracking number, compartment, or delivery date."
+        speak_output = "You can ask me about your packages. For example, you can say 'what packages do I have?', 'tell me about the FedEx package', 'tell me about package 2', or ask for specific details like carrier, tracking number, compartment, or delivery date."
         return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
 
 
@@ -516,25 +584,20 @@ class FallbackIntentHandler(AbstractRequestHandler):
         return ask_utils.is_intent_name("AMAZON.FallbackIntent")(handler_input)
 
     def handle(self, handler_input):
-        # Try to understand what the user wants
         packages = LATEST_PACKAGES.get(CURRENT_UNIT, [])
         
         if not packages:
             speak_output = "You have no packages right now. Would you like to know anything else?"
             return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
         
-        # Get the user's utterance to try and understand
-        try:
-            utterance = handler_input.request_envelope.request.intent.name
-            logger.info(f"Fallback intent triggered with utterance: {utterance}")
-        except:
-            pass
-        
-        # If there are packages, suggest what they can ask
         if len(packages) == 1:
-            speak_output = "I understand you have one package. would you like to know more about it?"
+            speak_output = "I understand you have one package. You can ask about its carrier, tracking number, compartment, or when it was delivered. Just say 'tell me about my package' or ask a specific question."
         else:
-            speak_output = f"I understand you have {len(packages)} packages. You can ask about the latest package, or inquire about a specific carrier, tracking number."
+            # List all packages with their positions
+            parts = []
+            for i, p in enumerate(packages, 1):
+                parts.append(f"Package {i} from {p.get('carrier', 'unknown')}")
+            speak_output = f"I understand you have {len(packages)} packages: {', '.join(parts)}. You can ask about a specific package by saying 'tell me about package 1' or 'tell me about the FedEx package'."
         
         return handler_input.response_builder.speak(speak_output).ask("What would you like to know?").response
 
@@ -592,7 +655,7 @@ sb.add_request_handler(PackageDetailsIntentHandler())
 sb.add_request_handler(CarrierInquiryIntentHandler())
 sb.add_request_handler(TrackingInquiryIntentHandler())
 sb.add_request_handler(CompartmentInquiryIntentHandler())
-sb.add_request_handler(DeliveryInquiryIntentHandler())  # NEW
+sb.add_request_handler(DeliveryInquiryIntentHandler())
 sb.add_request_handler(ExitIntentHandler())
 sb.add_request_handler(HelpIntentHandler())
 sb.add_request_handler(CancelAndStopIntentHandler())
