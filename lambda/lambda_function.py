@@ -495,7 +495,7 @@ class HelpIntentHandler(AbstractRequestHandler):
         return ask_utils.is_intent_name("AMAZON.HelpIntent")(handler_input)
 
     def handle(self, handler_input):
-        speak_output = "You can ask me about your packages. For example, you can say 'what packages do I have?' or 'tell me more about my package.' You can also ask for specific details like carrier, tracking number, compartment, or delivery date."
+        speak_output = "You can ask me about your packages. For example, specific details like carrier, tracking number, compartment, or delivery date."
         return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
 
 
@@ -532,9 +532,9 @@ class FallbackIntentHandler(AbstractRequestHandler):
         
         # If there are packages, suggest what they can ask
         if len(packages) == 1:
-            speak_output = "I understand you have one package. You can ask me about its carrier, tracking number, compartment, or when it was delivered."
+            speak_output = "I understand you have one package. would you like to know more about it?"
         else:
-            speak_output = f"I understand you have {len(packages)} packages. You can ask me about a specific package's carrier, tracking number, compartment, or when it was delivered."
+            speak_output = f"I understand you have {len(packages)} packages. You can ask about the latest package, or inquire about a specific carrier, tracking number."
         
         return handler_input.response_builder.speak(speak_output).ask("What would you like to know?").response
 
