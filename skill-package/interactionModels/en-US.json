@@ -16,8 +16,8 @@
           "samples": []
         },
         {
-        "name": "AMAZON.NavigateHomeIntent",
-        "samples": []
+          "name": "AMAZON.NavigateHomeIntent",
+          "samples": []
         },
         {
           "name": "AMAZON.FallbackIntent",
