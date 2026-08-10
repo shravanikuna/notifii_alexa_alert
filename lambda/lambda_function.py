@@ -748,6 +748,13 @@ class SessionEndedRequestHandler(AbstractRequestHandler):
         logger.info("Session ended")
         return handler_input.response_builder.response
 
+def log_package_state(packages, query="", context=""):
+    logger.info(f"=== PACKAGE STATE: {context} ===")
+    logger.info(f"Query: {query}")
+    logger.info(f"Total packages: {len(packages)}")
+    for i, p in enumerate(packages):
+        logger.info(f"  Package {i+1}: carrier={p.get('carrier')}, tracking={p.get('tracking_number')}")
+    logger.info("==================================")
 # ============================================
 # SKILL BUILDER REGISTRATION
 # ============================================

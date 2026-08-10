@@ -15,7 +15,9 @@
             "any packages for me",
             "do i have any notifications",
             "any notifications",
-            "check notifications"
+            "check notifications",
+            "what are my packages",
+            "show me my packages"
           ]
         },
         {
@@ -30,7 +32,13 @@
             "details",
             "tell me about the package",
             "give me more details",
-            "more details"
+            "more details",
+            "tell me about the {carrier} package",
+            "details about the {carrier} package",
+            "information about the {carrier} package",
+            "tell me about the {carrier} one",
+            "more about the {carrier} package",
+            "give me details about the {carrier} package"
           ],
           "slots": [
             {
@@ -42,14 +50,16 @@
         {
           "name": "WhichPackageIntent",
           "samples": [
-            "{carrier}",
             "the {carrier} package",
             "package from {carrier}",
             "the {carrier} one",
             "the tracking number {carrier}",
             "the one from {carrier}",
             "{carrier} package",
-            "about {carrier}"
+            "about the {carrier} one",
+            "give me the {carrier} package",
+            "show me the {carrier} package",
+            "the package from {carrier}"
           ],
           "slots": [
             {
@@ -69,7 +79,9 @@
             "who shipped it",
             "which carrier",
             "who delivered my package",
-            "carrier name"
+            "carrier name",
+            "who delivered it",
+            "delivery service"
           ]
         },
         {
@@ -82,7 +94,9 @@
             "do you have a tracking number",
             "give me the tracking number",
             "what is the tracking number",
-            "tracking ID"
+            "tracking ID",
+            "show me the tracking number",
+            "get tracking"
           ]
         },
         {
@@ -95,7 +109,9 @@
             "where is my package",
             "package location",
             "which locker",
-            "where can I find it"
+            "where can I find it",
+            "compartment location",
+            "where is the package"
           ]
         },
         {
@@ -108,7 +124,9 @@
             "when did it arrive",
             "delivered when",
             "delivery day",
-            "arrival time"
+            "arrival time",
+            "arrival date",
+            "what time did it arrive"
           ]
         },
         {
@@ -123,7 +141,9 @@
             "done",
             "that's it",
             "no thanks",
-            "not now"
+            "not now",
+            "all done",
+            "good night"
           ]
         },
         {
@@ -140,6 +160,14 @@
         },
         {
           "name": "AMAZON.FallbackIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.YesIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NoIntent",
           "samples": []
         }
       ],
