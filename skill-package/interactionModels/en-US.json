@@ -47,12 +47,20 @@
             "give me details about {carrier}",
             "give me more details {carrier} package",
             "more details {carrier}",
-            "details of {carrier} package"
+            "details of {carrier} package",
+            "give me more details for tracking number {tracking}",
+            "details for tracking {tracking}",
+            "tracking number {tracking}",
+            "the package with tracking number {tracking}"
           ],
           "slots": [
             {
               "name": "carrier",
               "type": "CARRIER_TYPE"
+            },
+            {
+              "name": "tracking",
+              "type": "AMAZON.NUMBER"
             }
           ]
         },

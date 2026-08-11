@@ -169,6 +169,19 @@ def get_user_configuration(unit: str) -> Optional[Dict]:
 # HELPER FUNCTIONS
 # ============================================
 
+def get_slot_value(handler_input, slot_name: str) -> Optional[str]:
+    try:
+        slot = handler_input.request_envelope.request.intent.slots.get(slot_name, {})
+        value = slot.get('value')
+        return str(value).strip() if value else None
+    except Exception:
+        return None
+
+def format_all_package_details(packages: List[Dict]) -> str:
+    """Full details for every package — used when no selector given and multiple exist."""
+    parts = [format_package_details(p) for p in packages]
+    return " Also, ".join(parts)
+
 def format_package_details(package: Dict) -> str:
     """Format full package details"""
     carrier = package.get('carrier', 'unknown carrier')
@@ -383,43 +396,45 @@ class PackageDetailsIntentHandler(AbstractRequestHandler):
         if not packages:
             speak_output = "You have no packages to get details about."
             return handler_input.response_builder.speak(speak_output).response
-        
+
         session_attr = handler_input.attributes_manager.session_attributes
-        
-        # Get carrier from slot
-        carrier_value = None
-        try:
-            carrier_slot = handler_input.request_envelope.request.intent.slots.get('carrier', {})
-            if carrier_slot:
-                carrier_value = carrier_slot.get('value', '').strip()
-                if carrier_value:
-                    carrier_value = carrier_value.lower()
-                    logger.info(f"PackageDetailsIntent - Carrier from slot: {carrier_value}")
-        except Exception as e:
-            logger.error(f"Error getting carrier slot: {e}")
-        
-        # If carrier found, try to match
-        if carrier_value:
-            found_package = PackageMatcher.match(packages, carrier_value)
-            
+
+        # 1. Tracking number — most specific, always wins
+        tracking_value = get_slot_value(handler_input, 'tracking')
+        if tracking_value:
+            found_package = PackageMatcher.match(packages, tracking_value)
             if found_package:
                 speak_output = format_package_details(found_package)
                 session_attr['current_package'] = found_package
                 session_attr['conversation_state'] = CONVERSATION_STATE['SHOWING_DETAILS']
                 return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else about this package?").response
-        
-        # If no carrier or no match, show available packages
+            else:
+                speak_output = f"I couldn't find a package with tracking number {tracking_value}."
+                return handler_input.response_builder.speak(speak_output).ask("Would you like to hear about all your packages instead?").response
+
+        # 2. Carrier
+        carrier_value = get_slot_value(handler_input, 'carrier')
+        if carrier_value:
+            found_package = PackageMatcher.match(packages, carrier_value.lower())
+            if found_package:
+                speak_output = format_package_details(found_package)
+                session_attr['current_package'] = found_package
+                session_attr['conversation_state'] = CONVERSATION_STATE['SHOWING_DETAILS']
+                return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else about this package?").response
+
+        # 3. No selector given — single package: just give it
         if len(packages) == 1:
             found_package = packages[0]
             speak_output = format_package_details(found_package)
             session_attr['current_package'] = found_package
             session_attr['conversation_state'] = CONVERSATION_STATE['SHOWING_DETAILS']
-        else:
-            speak_output = format_available_packages(packages)
-            session_attr['conversation_state'] = CONVERSATION_STATE['ASKING_WHICH_PACKAGE']
-            return handler_input.response_builder.speak(speak_output).ask("Which package would you like details about?").response
-        
-        return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else about this package?").response
+            return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else about this package?").response
+
+        # 4. No selector, multiple packages — give ALL details (per spec)
+        speak_output = format_all_package_details(packages)
+        session_attr['conversation_state'] = CONVERSATION_STATE['SHOWING_DETAILS']
+        return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
+
 def format_available_packages(packages, query=None):
     """Format available packages with tracking numbers"""
     package_list = []
@@ -516,6 +531,15 @@ class CarrierInquiryIntentHandler(AbstractRequestHandler):
             speak_output = "You have no packages to inquire about."
             return handler_input.response_builder.speak(speak_output).response
         
+        session_attr = handler_input.attributes_manager.session_attributes
+        
+        # Check tracking first
+        tracking_value = get_slot_value(handler_input, 'tracking')
+        if tracking_value:
+            matched = PackageMatcher.match(packages, tracking_value)
+            if matched:
+                found_package = matched
+        
         # Get from session or latest
         session_attr = handler_input.attributes_manager.session_attributes
         package = session_attr.get('current_package', packages[-1])
@@ -537,6 +561,13 @@ class TrackingInquiryIntentHandler(AbstractRequestHandler):
             return handler_input.response_builder.speak(speak_output).response
         
         session_attr = handler_input.attributes_manager.session_attributes
+        
+        # Check tracking first
+        tracking_value = get_slot_value(handler_input, 'tracking')
+        if tracking_value:
+            matched = PackageMatcher.match(packages, tracking_value)
+            if matched:
+                found_package = matched
         
         # Try to get carrier from slots
         carrier_value = None
@@ -574,6 +605,15 @@ class CompartmentInquiryIntentHandler(AbstractRequestHandler):
         if not packages:
             speak_output = "You have no packages to inquire about."
             return handler_input.response_builder.speak(speak_output).response
+        
+        session_attr = handler_input.attributes_manager.session_attributes
+        
+        # Check tracking first
+        tracking_value = get_slot_value(handler_input, 'tracking')
+        if tracking_value:
+            matched = PackageMatcher.match(packages, tracking_value)
+            if matched:
+                found_package = matched
         
         # Get from session or latest
         session_attr = handler_input.attributes_manager.session_attributes
@@ -649,6 +689,13 @@ class DeliveryInquiryIntentHandler(AbstractRequestHandler):
             return handler_input.response_builder.speak(speak_output).response
         
         session_attr = handler_input.attributes_manager.session_attributes
+        
+        # Check tracking first
+        tracking_value = get_slot_value(handler_input, 'tracking')
+        if tracking_value:
+            matched = PackageMatcher.match(packages, tracking_value)
+            if matched:
+                found_package = matched
         
         # Try to get carrier from slots
         carrier_value = None
@@ -787,7 +834,6 @@ class SkillPermissionChangedHandler(AbstractRequestHandler):
         logger.info("Permission Changed")
         logger.info(json.dumps(handler_input.request_envelope.to_dict(), indent=2))
         return handler_input.response_builder.response
-
 
 class SkillDisabledHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
