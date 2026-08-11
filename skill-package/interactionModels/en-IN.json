@@ -96,9 +96,20 @@
             "which carrier",
             "who delivered my package",
             "carrier name",
-            "who delivered it",
             "delivery service",
-            "what is the carrier"
+            "what is the carrier",
+            "what carrier for tracking {tracking}",
+            "who delivered the package with tracking {tracking}"
+          ],
+          "slots": [
+            {
+              "name": "carrier",
+              "type": "AMAZON.SearchQuery"
+            },
+            {
+              "name": "tracking",
+              "type": "AMAZON.SearchQuery"
+            }
           ]
         },
         {
@@ -115,7 +126,19 @@
             "show me the tracking number",
             "get tracking",
             "what is the tracking",
-            "tracking"
+            "tracking",
+            "what's the tracking number for the {carrier} package",
+            "tracking number for {carrier}"
+          ],
+          "slots": [
+            {
+              "name": "carrier",
+              "type": "AMAZON.SearchQuery"
+            },
+            {
+              "name": "tracking",
+              "type": "AMAZON.SearchQuery"
+            }
           ]
         },
         {
@@ -132,7 +155,20 @@
             "compartment location",
             "where is the package",
             "what is the compartment",
-            "where it stored"
+            "in which compartment the {carrier} package is stored",
+            "in which compartment the package with tracking number {tracking} is stored",
+            "which compartment for {carrier}",
+            "compartment for tracking {tracking}"
+          ],
+          "slots": [
+            {
+              "name": "carrier",
+              "type": "AMAZON.SearchQuery"
+            },
+            {
+              "name": "tracking",
+              "type": "AMAZON.SearchQuery"
+            }
           ]
         },
         {
@@ -147,7 +183,18 @@
             "delivery day",
             "arrival time",
             "arrival date",
-            "what time did it arrive"
+            "when was the {carrier} package delivered",
+            "delivery date for tracking {tracking}"
+          ],
+          "slots": [
+            {
+              "name": "carrier",
+              "type": "AMAZON.SearchQuery"
+            },
+            {
+              "name": "tracking",
+              "type": "AMAZON.SearchQuery"
+            }
           ]
         },
         {
