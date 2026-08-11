@@ -171,10 +171,14 @@ def get_user_configuration(unit: str) -> Optional[Dict]:
 
 def get_slot_value(handler_input, slot_name: str) -> Optional[str]:
     try:
-        slot = handler_input.request_envelope.request.intent.slots.get(slot_name, {})
-        value = slot.get('value')
+        slots = handler_input.request_envelope.request.intent.slots
+        if not slots or slot_name not in slots:
+            return None
+        slot = slots[slot_name]
+        value = slot.value
         return str(value).strip() if value else None
-    except Exception:
+    except Exception as e:
+        logger.error(f"get_slot_value error for '{slot_name}': {e}")
         return None
 
 def format_all_package_details(packages: List[Dict]) -> str:
@@ -491,12 +495,10 @@ class WhichPackageIntentHandler(AbstractRequestHandler):
         # Get the carrier from the user's response
         carrier_value = None
         try:
-            carrier_slot = handler_input.request_envelope.request.intent.slots.get('carrier', {})
-            if carrier_slot:
-                carrier_value = carrier_slot.get('value', '').strip()
-                if carrier_value:
-                    carrier_value = carrier_value.lower()
-                    logger.info(f"WhichPackageIntent - Carrier: {carrier_value}")
+            carrier_value = get_slot_value(handler_input, 'carrier')
+            if carrier_value:
+                carrier_value = carrier_value.lower()
+                logger.info(f"WhichPackageIntent - Carrier: {carrier_value}")
         except Exception as e:
             logger.error(f"Error in WhichPackageIntent: {e}")
         
@@ -572,11 +574,9 @@ class TrackingInquiryIntentHandler(AbstractRequestHandler):
         # Try to get carrier from slots
         carrier_value = None
         try:
-            carrier_slot = handler_input.request_envelope.request.intent.slots.get('carrier', {})
-            if carrier_slot:
-                carrier_value = carrier_slot.get('value', '').strip()
-                if carrier_value:
-                    carrier_value = carrier_value.lower()
+                  carrier_value = get_slot_value(handler_input, 'carrier')
+                  if carrier_value:
+                   carrier_value = carrier_value.lower()
         except:
             pass
         
@@ -605,23 +605,26 @@ class CompartmentInquiryIntentHandler(AbstractRequestHandler):
         if not packages:
             speak_output = "You have no packages to inquire about."
             return handler_input.response_builder.speak(speak_output).response
-        
+
         session_attr = handler_input.attributes_manager.session_attributes
-        
-        # Check tracking first
+        found_package = None
+
         tracking_value = get_slot_value(handler_input, 'tracking')
         if tracking_value:
-            matched = PackageMatcher.match(packages, tracking_value)
-            if matched:
-                found_package = matched
-        
-        # Get from session or latest
-        session_attr = handler_input.attributes_manager.session_attributes
-        package = session_attr.get('current_package', packages[-1])
-        
-        compartment = package.get('compartment', 'unknown compartment')
+            found_package = PackageMatcher.match(packages, tracking_value)
+
+        if not found_package:
+            carrier_value = get_slot_value(handler_input, 'carrier')
+            if carrier_value:
+                found_package = PackageMatcher.match(packages, carrier_value.lower())
+
+        if not found_package:
+            found_package = session_attr.get('current_package', packages[-1])
+
+        compartment = found_package.get('compartment', 'unknown compartment')
         speak_output = f"This package is stored in compartment {compartment}."
-        
+        session_attr['current_package'] = found_package
+
         return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
 class PackageMatcher:
     """Handles matching packages without hardcoding carriers"""
@@ -700,11 +703,9 @@ class DeliveryInquiryIntentHandler(AbstractRequestHandler):
         # Try to get carrier from slots
         carrier_value = None
         try:
-            carrier_slot = handler_input.request_envelope.request.intent.slots.get('carrier', {})
-            if carrier_slot:
-                carrier_value = carrier_slot.get('value', '').strip()
-                if carrier_value:
-                    carrier_value = carrier_value.lower()
+             carrier_value = get_slot_value(handler_input, 'carrier')
+             if carrier_value:
+              carrier_value = carrier_value.lower()
         except:
             pass
         
@@ -768,21 +769,21 @@ class FallbackIntentHandler(AbstractRequestHandler):
 
     def handle(self, handler_input):
         packages = LATEST_PACKAGES.get(CURRENT_UNIT, [])
-        
+
         if not packages:
             speak_output = "You have no packages right now. Would you like to know anything else?"
             return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
-        
+
         session_attr = handler_input.attributes_manager.session_attributes
-        
-        # Try to extract carrier from slots
+
         carrier_value = None
         try:
-            for slot_name, slot in handler_input.request_envelope.request.intent.slots.items():
-                if slot and slot.get('value'):
-                    potential = slot.get('value', '').strip().lower()
-                    if potential:
-                        # Check if it matches any package carrier
+            slots = handler_input.request_envelope.request.intent.slots
+            if slots:
+                for slot_name, slot in slots.items():
+                    value = getattr(slot, 'value', None)
+                    if value:
+                        potential = str(value).strip().lower()
                         for p in packages:
                             carrier = p.get('carrier', '').lower()
                             if potential in carrier or carrier in potential:
@@ -793,28 +794,26 @@ class FallbackIntentHandler(AbstractRequestHandler):
                             break
         except Exception as e:
             logger.error(f"Error in fallback: {e}")
-        
-        # If we found a carrier, show package details
+
         if carrier_value:
             found_package = PackageMatcher.match(packages, carrier_value)
             if found_package:
                 speak_output = format_package_details(found_package)
                 session_attr['current_package'] = found_package
                 return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else about this package?").response
-        
-        # Show all packages
+
         package_list = []
         for p in packages:
             carrier = p.get('carrier', 'unknown carrier')
             tracking = p.get('tracking_number', 'no tracking number')
             package_list.append(f"one from {carrier} with tracking number {tracking}")
-        
+
         if len(package_list) == 1:
             speak_output = f"You have {package_list[0]}. You can ask me about the carrier, tracking number, compartment, or when it was delivered."
         else:
             package_str = ", ".join(package_list[:-1]) + f", and {package_list[-1]}"
             speak_output = f"You have {len(packages)} packages: {package_str}. You can ask me about a specific package's carrier, tracking number, compartment, or when it was delivered."
-        
+
         return handler_input.response_builder.speak(speak_output).ask("What would you like to know?").response
 class CatchAllExceptionHandler(AbstractExceptionHandler):
     def can_handle(self, handler_input, exception):
