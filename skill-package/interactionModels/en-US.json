@@ -56,11 +56,11 @@
           "slots": [
             {
               "name": "carrier",
-              "type": "CARRIER_TYPE"
+              "type": "AMAZON.SearchQuery"
             },
             {
               "name": "tracking",
-              "type": "AMAZON.NUMBER"
+              "type": "AMAZON.SearchQuery"
             }
           ]
         },
@@ -80,7 +80,7 @@
           "slots": [
             {
               "name": "carrier",
-              "type": "CARRIER_TYPE"
+              "type": "AMAZON.SearchQuery"
             }
           ]
         },
