@@ -52,6 +52,54 @@
           "keywords": [
             "packages"
           ]
+        },
+        "en-IN": {
+          "name": "rabbit",
+          "summary": "Smart delivery tracking for residents.",
+          "description": "Receive package alerts with Rabbit.",
+          "examplePhrases": [
+            "Alexa, open rabbit",
+            "Alexa, ask rabbit for my packages"
+          ],
+          "keywords": [
+            "packages"
+          ]
+        },
+        "en-GB":{
+          "name": "rabbit",
+          "summary":"Smart delivery tracking for residents.",
+          "description":"Receive package alerts with Rabbit",
+          "examplePhrases": [
+            "Alexa, open rabbit",
+          "Alexa, ask rabbit for my packages"
+          ],
+          "keywords":[
+            "packages"
+          ]
+        },
+        "en-CA":{
+          "name":"rabbit",
+          "summary":"Smart delivery tracking for residents.",
+          "description":"Receive package alerts with Rabbit",
+          "examplePhrases":[
+            "Alexa, open rabbit",
+          "Alexa, ask rabbit for my packages"
+          ],
+          "keywords":[
+            "packages"
+          ]
+        },
+        "en-AU":{
+          "name":"rabbit",
+          "summary":"Smart delivery tracking for residents.",
+          "description":"Receive package alerts with Rabbit",
+          "examplePhrases":[
+            "Alexa, open rabbit",
+          "Alexa, ask rabbit for my packages"
+          ],
+          "keywords":[
+            "packages"
+          ]
         }
       },
       "testingInstructions": "Open the skill, enable notifications in Alexa App, then POST a webhook to /webhook/package-delivered."
