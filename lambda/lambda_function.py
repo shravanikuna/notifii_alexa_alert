@@ -104,9 +104,22 @@ alexa_client = AlexaProactiveEventsClient()
 def get_user_configuration(unit: str) -> Optional[Dict]:
     return db.get_resident_by_unit(unit)
 
+
 # ============================================
 # HELPERS
 # ============================================
+
+def parse_iso_to_mysql_datetime(iso_string: Optional[str]) -> Optional[str]:
+    """Converts '2026-08-19T16:00:00.000Z' -> '2026-08-19 16:00:00' for MySQL DATETIME columns."""
+    if not iso_string:
+        return None
+    try:
+        dt = datetime.fromisoformat(iso_string.replace('Z', '+00:00'))
+        return dt.strftime('%Y-%m-%d %H:%M:%S')
+    except Exception as e:
+        logger.error(f"Failed to parse delivered_at '{iso_string}': {e}")
+        return None
+    
 def get_slot_value(handler_input, slot_name: str) -> Optional[str]:
     """CORRECT way to read a Slot object — attribute access, not dict .get()"""
     try:
@@ -127,16 +140,15 @@ def format_package_details(package: Dict) -> str:
     if delivered_at:
         try:
             if isinstance(delivered_at, str):
-                dt = datetime.fromisoformat(delivered_at.replace('Z', '+00:00'))
+                dt = datetime.strptime(delivered_at, '%Y-%m-%d %H:%M:%S')
             else:
-                dt = delivered_at  # already a datetime object from MySQL
+                dt = delivered_at  # native datetime from MySQL connector
             delivered_str = dt.strftime('%B %d, %Y at %I:%M %p')
         except Exception:
             delivered_str = str(delivered_at)
     else:
         delivered_str = 'recently'
     return f"Package from {carrier}, tracking number {tracking}, stored in compartment {compartment}, delivered on {delivered_str}"
-
 def format_all_package_details(packages: List[Dict]) -> str:
     return " Also, ".join(format_package_details(p) for p in packages)
 
@@ -221,18 +233,16 @@ def handle_package_event(event: Dict, context: Any) -> Dict:
     carrier = data.get('carrier', 'courier')
     tracking_number = data.get('tracking_number')
     compartment = data.get('compartment')
-    delivered_at = data.get('delivered_at')
+    delivered_at_raw = data.get('delivered_at')
+    delivered_at = parse_iso_to_mysql_datetime(delivered_at_raw)   # ← converted here
 
     if not unit or not package_id:
         return {"status": "error", "message": "Missing unit or package_id"}
 
     user_config = get_user_configuration(unit)
+    logger.info(f"User config: {user_config}")  
     if not user_config:
         return {"status": "error", "message": f"User unit {unit} not found"}
-    if not user_config.get('opted_in', False):
-        return {"status": "skipped", "reason": "User not opted in"}
-
-    alexa_user_id = user_config.get('alexa_user_id')
 
     package_row_id = db.save_package(
         resident_id=user_config['id'],
@@ -240,23 +250,27 @@ def handle_package_event(event: Dict, context: Any) -> Dict:
         carrier=carrier,
         tracking_number=tracking_number,
         compartment=compartment,
-        delivered_at=delivered_at
+        delivered_at=delivered_at   # now MySQL-formatted, or None
     )
     logger.info(f"📦 Saved package row_id={package_row_id} for unit {unit}")
 
+    if not package_row_id:
+        return {"status": "error", "message": "Failed to save package to database"}
+
+    if not user_config.get('opted_in', False):
+        return {"status": "skipped_notification", "package_id": package_id, "reason": "User not opted in for Alexa notifications"}
+
+    alexa_user_id = user_config.get('alexa_user_id')
     if not alexa_user_id:
-        return {"status": "skipped", "reason": "No Alexa User ID linked"}
+        return {"status": "skipped_notification", "package_id": package_id, "reason": "No Alexa User ID linked"}
 
-    result = alexa_client.send_notification(alexa_user_id, carrier, package_id, tracking_number, compartment, delivered_at, unit)
-
-    if result.get('status') == 'success' and package_row_id:
-        db.log_notification(package_row_id, None, "success")
+    # Note: still passing the ORIGINAL ISO string to Alexa's API — that format is correct for Amazon's schema
+    result = alexa_client.send_notification(alexa_user_id, carrier, package_id, tracking_number, compartment, delivered_at_raw, unit)
 
     if result.get('status') == 'success':
+        db.log_notification(package_row_id, None, "success")
         return {"status": "success", "package_id": package_id, "unit": unit, "message": f"Notification sent for {carrier} package"}
     return {"status": "error", "package_id": package_id, "error": result.get('message')}
-
-
 # ============================================
 # INTENT HANDLERS
 # ============================================

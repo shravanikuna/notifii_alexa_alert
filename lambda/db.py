@@ -3,24 +3,38 @@ import mysql.connector
 from mysql.connector import Error
 from contextlib import contextmanager
 import logging
+from dotenv import load_dotenv
+
+# Load .env file
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
 DB_CONFIG = {
-    'host': os.environ.get('DB_HOST', '').strip(),
-    'user': os.environ.get('DB_USER', '').strip(),
-    'password': os.environ.get('DB_PASSWORD', '').strip(),
-    'database': os.environ.get('DB_NAME', '').strip(),
+    'host': os.environ.get('DB_HOST', 'localhost'),
+    'user': os.environ.get('DB_USER', ''),
+    'password': os.environ.get('DB_PASSWORD', ''),
+    'database': os.environ.get('DB_NAME', ''),
     'port': int(os.environ.get('DB_PORT', 3306)),
 }
 
-
-@contextmanager
 def get_connection():
-    """Opens a connection, always closes it, even on error."""
-    conn = None
+    """Create a database connection using DB_CONFIG"""
     try:
         conn = mysql.connector.connect(**DB_CONFIG)
+        return conn
+    except Error as e:
+        logger.error(f"Database connection error: {e}")
+        raise
+
+# ... rest of your db.py functions remain the same
+
+@contextmanager
+def get_connection_context():
+    """Context manager for database connections"""
+    conn = None
+    try:
+        conn = get_connection()
         yield conn
     except Error as e:
         logger.error(f"Database connection error: {e}")
@@ -29,11 +43,10 @@ def get_connection():
         if conn and conn.is_connected():
             conn.close()
 
-
 def link_resident(unit: str, alexa_user_id: str, region: str = "NA") -> bool:
     """INSERT or UPDATE a resident's Alexa account link."""
     try:
-        with get_connection() as conn:
+        with get_connection_context() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -54,11 +67,10 @@ def link_resident(unit: str, alexa_user_id: str, region: str = "NA") -> bool:
         logger.error(f"link_resident error: {e}")
         return False
 
-
 def get_resident_by_alexa_id(alexa_user_id: str):
     """SELECT — used to find which unit an Alexa account belongs to."""
     try:
-        with get_connection() as conn:
+        with get_connection_context() as conn:
             cursor = conn.cursor(dictionary=True)
             cursor.execute(
                 "SELECT * FROM residents WHERE alexa_user_id = %s AND opted_in = TRUE",
@@ -71,11 +83,10 @@ def get_resident_by_alexa_id(alexa_user_id: str):
         logger.error(f"get_resident_by_alexa_id error: {e}")
         return None
 
-
 def get_resident_by_unit(unit: str):
     """SELECT — used by the webhook to find a resident's Alexa account."""
     try:
-        with get_connection() as conn:
+        with get_connection_context() as conn:
             cursor = conn.cursor(dictionary=True)
             cursor.execute(
                 "SELECT * FROM residents WHERE unit = %s AND opted_in = TRUE",
@@ -88,12 +99,13 @@ def get_resident_by_unit(unit: str):
         logger.error(f"get_resident_by_unit error: {e}")
         return None
 
-
 def save_package(resident_id: int, package_id: str, carrier: str,
                   tracking_number: str, compartment: str, delivered_at: str) -> int:
     """INSERT a new package row, returns the new package's id."""
     try:
-        with get_connection() as conn:
+        logger.info(f"📝 save_package called: resident_id={resident_id}, package_id={package_id}, carrier={carrier}")
+        
+        with get_connection_context() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -106,16 +118,15 @@ def save_package(resident_id: int, package_id: str, carrier: str,
             conn.commit()
             new_id = cursor.lastrowid
             cursor.close()
+            logger.info(f"✅ Package saved successfully with ID: {new_id}")
             return new_id
     except Error as e:
-        logger.error(f"save_package error: {e}")
+        logger.error(f"❌ save_package error: {e}")
         return None
-
-
 def get_packages_for_unit(unit: str):
     """SELECT — all packages for a unit, joined through residents."""
     try:
-        with get_connection() as conn:
+        with get_connection_context() as conn:
             cursor = conn.cursor(dictionary=True)
             cursor.execute(
                 """
@@ -133,11 +144,10 @@ def get_packages_for_unit(unit: str):
         logger.error(f"get_packages_for_unit error: {e}")
         return []
 
-
 def log_notification(package_row_id: int, amazon_request_id: str, status: str):
     """INSERT into notification_log — tracks every send attempt."""
     try:
-        with get_connection() as conn:
+        with get_connection_context() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """

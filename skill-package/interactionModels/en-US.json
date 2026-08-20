@@ -237,6 +237,21 @@
         {
           "name": "AMAZON.NoIntent",
           "samples": []
+        },
+        {
+          "name": "LinkUnitIntent",
+          "slots": [
+            {
+              "name": "unit",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "link my unit {unit}",
+            "link unit {unit}",
+            "my unit is {unit}",
+            "connect unit {unit}"
+          ]
         }
       ],
       "types": [
