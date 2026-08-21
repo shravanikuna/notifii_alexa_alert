@@ -22,7 +22,83 @@ def get_connection():
     except Error as e:
         logger.error(f"Database connection error: {e}")
         raise
+def link_account_id_to_alexa(account_id: str, alexa_user_id: str, region: str = "NA") -> bool:
+    """Link an account_id to an alexa_user_id."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        # Check if account_id already exists
+        cursor.execute(
+            "SELECT * FROM residents WHERE account_id = %s",
+            (account_id,)
+        )
+        existing = cursor.fetchone()
+        
+        if existing:
+            # Update existing record with alexa_user_id
+            cursor.execute(
+                """
+                UPDATE residents 
+                SET alexa_user_id = %s, alexa_region = %s, opted_in = TRUE, linked_at = NOW()
+                WHERE account_id = %s
+                """,
+                (alexa_user_id, region, account_id)
+            )
+        else:
+            # Create new resident record
+            cursor.execute(
+                """
+                INSERT INTO residents (account_id, alexa_user_id, alexa_region, opted_in, linked_at)
+                VALUES (%s, %s, %s, TRUE, NOW())
+                """,
+                (account_id, alexa_user_id, region)
+            )
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return True
+        
+    except Error as e:
+        logger.error(f"link_account_id_to_alexa error: {e}")
+        return False
 
+def get_resident_by_account_id(account_id: str):
+    """Get resident by account_id."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT * FROM residents WHERE account_id = %s AND opted_in = TRUE",
+            (account_id,)
+        )
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return result
+    except Error as e:
+        logger.error(f"get_resident_by_account_id error: {e}")
+        return None
+
+def register_enabled_user(alexa_user_id: str, region: str = "EU"):
+    """Called automatically when SkillEnabled fires. Creates a pending row if unit isn't known yet."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM residents WHERE alexa_user_id = %s", (alexa_user_id,))
+        if cursor.fetchone():
+            cursor.close(); conn.close()
+            return  # already known
+        cursor.execute(
+            "INSERT INTO residents (unit, alexa_user_id, alexa_region, opted_in, pending, linked_at) "
+            "VALUES (NULL, %s, %s, TRUE, TRUE, NOW())",
+            (alexa_user_id, region)
+        )
+        conn.commit(); cursor.close(); conn.close()
+        logger.info(f"Registered pending resident for {alexa_user_id[:20]}...")
+    except Error as e:
+        logger.error(f"register_enabled_user error: {e}")
 
 def link_resident(unit: str, alexa_user_id: str, region: str = "NA") -> bool:
     try:
