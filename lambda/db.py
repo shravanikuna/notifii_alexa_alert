@@ -2,11 +2,10 @@ import os
 import mysql.connector
 from mysql.connector import Error
 import logging
+from datetime import datetime
 from dotenv import load_dotenv
 
-# Load .env file
 load_dotenv()
-
 logger = logging.getLogger(__name__)
 
 DB_CONFIG = {
@@ -18,277 +17,221 @@ DB_CONFIG = {
 }
 
 def get_connection():
-    """Create a database connection using DB_CONFIG"""
     try:
-        conn = mysql.connector.connect(**DB_CONFIG)
-        return conn
+        return mysql.connector.connect(**DB_CONFIG)
     except Error as e:
         logger.error(f"Database connection error: {e}")
         raise
 
+
 def link_resident(unit: str, alexa_user_id: str, region: str = "NA") -> bool:
-    """Link a resident's unit to their Alexa user ID."""
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        
-        # First, check if this Alexa user is already linked to another unit
-        cursor.execute(
-            "SELECT * FROM residents WHERE alexa_user_id = %s",
-            (alexa_user_id,)
-        )
+        cursor.execute("SELECT * FROM residents WHERE alexa_user_id = %s", (alexa_user_id,))
         existing = cursor.fetchone()
-        
         if existing:
-            # Update the existing record with new unit
             cursor.execute(
-                """
-                UPDATE residents 
-                SET unit = %s, alexa_region = %s, opted_in = TRUE, linked_at = NOW()
-                WHERE alexa_user_id = %s
-                """,
+                "UPDATE residents SET unit = %s, alexa_region = %s, opted_in = TRUE, linked_at = NOW() WHERE alexa_user_id = %s",
                 (unit, region, alexa_user_id)
             )
-            conn.commit()
-            cursor.close()
-            conn.close()
-            logger.info(f"✅ Updated existing resident: unit={unit}, alexa_user_id={alexa_user_id[:20]}...")
+            conn.commit(); cursor.close(); conn.close()
             return True
-        
-        # Check if unit is already linked to another Alexa user
-        cursor.execute(
-            "SELECT * FROM residents WHERE unit = %s",
-            (unit,)
-        )
+
+        cursor.execute("SELECT * FROM residents WHERE unit = %s", (unit,))
         unit_existing = cursor.fetchone()
-        
         if unit_existing:
-            # Unit exists but no Alexa user linked yet (alexa_user_id is NULL)
             cursor.execute(
-                """
-                UPDATE residents 
-                SET alexa_user_id = %s, alexa_region = %s, opted_in = TRUE, linked_at = NOW()
-                WHERE unit = %s
-                """,
+                "UPDATE residents SET alexa_user_id = %s, alexa_region = %s, opted_in = TRUE, linked_at = NOW() WHERE unit = %s",
                 (alexa_user_id, region, unit)
             )
-            conn.commit()
-            cursor.close()
-            conn.close()
-            logger.info(f"✅ Updated unit {unit} with Alexa user: {alexa_user_id[:20]}...")
+            conn.commit(); cursor.close(); conn.close()
             return True
-        
-        # New resident - insert
+
         cursor.execute(
-            """
-            INSERT INTO residents (unit, alexa_user_id, alexa_region, opted_in, linked_at)
-            VALUES (%s, %s, %s, TRUE, NOW())
-            """,
+            "INSERT INTO residents (unit, alexa_user_id, alexa_region, opted_in, linked_at) VALUES (%s, %s, %s, TRUE, NOW())",
             (unit, alexa_user_id, region)
         )
-        conn.commit()
-        cursor.close()
-        conn.close()
-        logger.info(f"✅ Created new resident: unit={unit}, alexa_user_id={alexa_user_id[:20]}...")
+        conn.commit(); cursor.close(); conn.close()
         return True
-        
     except Error as e:
-        logger.error(f"❌ link_resident error: {e}")
+        logger.error(f"link_resident error: {e}")
         return False
 
+
 def get_resident_by_alexa_id(alexa_user_id: str):
+    """
+    IMPORTANT: no longer requires opted_in = TRUE to recognize the user.
+    opted_in only gates whether PROACTIVE webhook notifications are sent —
+    it should never block Alexa from recognizing an already-linked resident.
+    """
     try:
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute(
-            "SELECT * FROM residents WHERE alexa_user_id = %s AND opted_in = TRUE",
-            (alexa_user_id,)
-        )
+        cursor.execute("SELECT * FROM residents WHERE alexa_user_id = %s", (alexa_user_id,))
         result = cursor.fetchone()
-        cursor.close()
-        conn.close()
+        cursor.close(); conn.close()
         return result
     except Error as e:
         logger.error(f"get_resident_by_alexa_id error: {e}")
         return None
 
-def get_resident_by_unit(unit: str):
-    try:
-        conn = get_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute(
-            "SELECT * FROM residents WHERE unit = %s AND opted_in = TRUE",
-            (unit,)
-        )
-        result = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        return result
-    except Error as e:
-        logger.error(f"get_resident_by_unit error: {e}")
-        return None
 
 def get_resident_by_address(address: str):
     try:
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute(
-            "SELECT * FROM residents WHERE unit = %s",
-            (address,)
-        )
+        cursor.execute("SELECT * FROM residents WHERE unit = %s", (address,))
         result = cursor.fetchone()
-        cursor.close()
-        conn.close()
+        cursor.close(); conn.close()
         return result
     except Error as e:
         logger.error(f"get_resident_by_address error: {e}")
         return None
 
-def save_or_update_package(resident_id: int, package_id: str, carrier: str,
-                           tracking_number: str, compartment: str, delivered_at: str):
-    """Insert or update package. Returns (package_row, is_new)."""
-    logger.info(f"📝 save_or_update_package called: resident_id={resident_id}, package_id={package_id}")
-    
+
+def save_or_update_package(resident_id, package_id, carrier, tracking_number, compartment, delivered_at):
+    """Insert or update — same package_id + resident never creates a duplicate row."""
     try:
-        # Check if package exists - use a fresh connection
-        conn1 = get_connection()
-        cursor1 = conn1.cursor(dictionary=True)
-        cursor1.execute(
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
             "SELECT * FROM packages WHERE package_id = %s AND resident_id = %s",
             (package_id, resident_id)
         )
-        existing = cursor1.fetchone()
-        cursor1.close()
-        conn1.close()
-        
-        logger.info(f"🔍 Existing package: {existing}")
-        
+        existing = cursor.fetchone()
+        cursor.close(); conn.close()
+
         if existing:
-            # Update - use a fresh connection
-            conn2 = get_connection()
-            cursor2 = conn2.cursor()
-            cursor2.execute(
-                """
-                UPDATE packages 
-                SET carrier = %s, tracking_number = %s, compartment = %s, 
-                    delivered_at = %s
-                WHERE id = %s
-                """,
+            conn = get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE packages SET carrier=%s, tracking_number=%s, compartment=%s, delivered_at=%s WHERE id=%s",
                 (carrier, tracking_number, compartment, delivered_at, existing['id'])
             )
-            conn2.commit()
-            cursor2.close()
-            
-            # Fetch updated record - use a fresh connection
-            conn3 = get_connection()
-            cursor3 = conn3.cursor(dictionary=True)
-            cursor3.execute(
-                "SELECT * FROM packages WHERE id = %s",
-                (existing['id'],)
-            )
-            updated = cursor3.fetchone()
-            cursor3.close()
-            conn3.close()
-            
-            logger.info(f"✅ Package updated: {updated}")
+            conn.commit(); cursor.close(); conn.close()
+
+            conn = get_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT * FROM packages WHERE id = %s", (existing['id'],))
+            updated = cursor.fetchone()
+            cursor.close(); conn.close()
             return updated, False
-        
-        # Insert new package - use a fresh connection
-        conn2 = get_connection()
-        cursor2 = conn2.cursor()
-        cursor2.execute(
-            """
-            INSERT INTO packages 
-                (resident_id, package_id, carrier, tracking_number, compartment, delivered_at)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            """,
+
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO packages (resident_id, package_id, carrier, tracking_number, compartment, delivered_at) "
+            "VALUES (%s, %s, %s, %s, %s, %s)",
             (resident_id, package_id, carrier, tracking_number, compartment, delivered_at)
         )
-        conn2.commit()
-        new_id = cursor2.lastrowid
-        cursor2.close()
-        conn2.close()
-        
-        logger.info(f"📝 New package ID: {new_id}")
-        
-        # Fetch new record - use a fresh connection
-        conn3 = get_connection()
-        cursor3 = conn3.cursor(dictionary=True)
-        cursor3.execute(
-            "SELECT * FROM packages WHERE id = %s",
-            (new_id,)
-        )
-        new_row = cursor3.fetchone()
-        cursor3.close()
-        conn3.close()
-        
-        logger.info(f"✅ New package inserted: {new_row}")
+        conn.commit()
+        new_id = cursor.lastrowid
+        cursor.close(); conn.close()
+
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM packages WHERE id = %s", (new_id,))
+        new_row = cursor.fetchone()
+        cursor.close(); conn.close()
         return new_row, True
-        
     except Error as e:
-        logger.error(f"❌ save_or_update_package error: {e}")
+        logger.error(f"save_or_update_package error: {e}")
         return None, False
+
 
 def mark_package_notified(package_row_id: int):
     try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE packages SET notification_status = 'notified', last_notified_at = NOW() WHERE id = %s",
-            (package_row_id,)
-        )
-        conn.commit()
-        cursor.close()
-        conn.close()
+        conn = get_connection(); cursor = conn.cursor()
+        cursor.execute("UPDATE packages SET notification_status='notified', last_notified_at=NOW() WHERE id=%s", (package_row_id,))
+        conn.commit(); cursor.close(); conn.close()
     except Error as e:
         logger.error(f"mark_package_notified error: {e}")
 
+
 def increment_reminder(package_row_id: int):
+    try:
+        conn = get_connection(); cursor = conn.cursor()
+        cursor.execute("UPDATE packages SET reminder_count = reminder_count + 1, last_notified_at = NOW() WHERE id=%s", (package_row_id,))
+        conn.commit(); cursor.close(); conn.close()
+    except Error as e:
+        logger.error(f"increment_reminder error: {e}")
+
+
+def get_all_packages_for_resident(resident_id: int):
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM packages WHERE resident_id = %s ORDER BY delivered_at DESC", (resident_id,))
+        results = cursor.fetchall()
+        cursor.close(); conn.close()
+        return results
+    except Error as e:
+        logger.error(f"get_all_packages_for_resident error: {e}")
+        return []
+
+
+def get_unheard_packages_for_resident(resident_id: int):
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT * FROM packages WHERE resident_id = %s AND heard_at IS NULL ORDER BY delivered_at DESC",
+            (resident_id,)
+        )
+        results = cursor.fetchall()
+        cursor.close(); conn.close()
+        return results
+    except Error as e:
+        logger.error(f"get_unheard_packages_for_resident error: {e}")
+        return []
+
+
+def mark_packages_heard(package_row_ids):
+    if not package_row_ids:
+        return
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE packages SET reminder_count = reminder_count + 1, last_notified_at = NOW() WHERE id = %s",
-            (package_row_id,)
-        )
-        conn.commit()
-        cursor.close()
-        conn.close()
+        format_ids = ','.join(['%s'] * len(package_row_ids))
+        cursor.execute(f"UPDATE packages SET heard_at = NOW() WHERE id IN ({format_ids})", tuple(package_row_ids))
+        conn.commit(); cursor.close(); conn.close()
     except Error as e:
-        logger.error(f"increment_reminder error: {e}")
+        logger.error(f"mark_packages_heard error: {e}")
+
+
+def update_last_session(resident_id: int):
+    try:
+        conn = get_connection(); cursor = conn.cursor()
+        cursor.execute("UPDATE residents SET last_session_at = NOW() WHERE id = %s", (resident_id,))
+        conn.commit(); cursor.close(); conn.close()
+    except Error as e:
+        logger.error(f"update_last_session error: {e}")
+
 
 def get_packages_for_unit(unit: str):
     try:
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
-            """
-            SELECT p.* FROM packages p
-            JOIN residents r ON p.resident_id = r.id
-            WHERE r.unit = %s
-            ORDER BY p.delivered_at DESC
-            """,
+            "SELECT p.* FROM packages p JOIN residents r ON p.resident_id = r.id WHERE r.unit = %s ORDER BY p.delivered_at DESC",
             (unit,)
         )
         results = cursor.fetchall()
-        cursor.close()
-        conn.close()
+        cursor.close(); conn.close()
         return results
     except Error as e:
         logger.error(f"get_packages_for_unit error: {e}")
         return []
 
+
 def log_notification(package_row_id: int, amazon_request_id, status: str, status_reason: str = None):
     try:
-        conn = get_connection()
-        cursor = conn.cursor()
+        conn = get_connection(); cursor = conn.cursor()
         cursor.execute(
-            """INSERT INTO notification_log (package_id, amazon_request_id, status, status_reason) 
-               VALUES (%s, %s, %s, %s)""",
+            "INSERT INTO notification_log (package_id, amazon_request_id, status, status_reason) VALUES (%s, %s, %s, %s)",
             (package_row_id, amazon_request_id, status, status_reason)
         )
-        conn.commit()
-        cursor.close()
-        conn.close()
+        conn.commit(); cursor.close(); conn.close()
     except Error as e:
         logger.error(f"log_notification error: {e}")
