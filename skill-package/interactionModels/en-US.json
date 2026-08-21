@@ -248,9 +248,10 @@
           ],
           "samples": [
             "link my unit {unit}",
-            "link unit {unit}",
             "my unit is {unit}",
-            "connect unit {unit}"
+            "unit {unit}",
+            "set unit {unit}",
+            "register unit {unit}"
           ]
         }
       ],

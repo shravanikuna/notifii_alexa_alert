@@ -1,7 +1,6 @@
 import os
 import mysql.connector
 from mysql.connector import Error
-from contextlib import contextmanager
 import logging
 from dotenv import load_dotenv
 
@@ -27,136 +26,269 @@ def get_connection():
         logger.error(f"Database connection error: {e}")
         raise
 
-# ... rest of your db.py functions remain the same
-
-@contextmanager
-def get_connection_context():
-    """Context manager for database connections"""
-    conn = None
+def link_resident(unit: str, alexa_user_id: str, region: str = "NA") -> bool:
+    """Link a resident's unit to their Alexa user ID."""
     try:
         conn = get_connection()
-        yield conn
-    except Error as e:
-        logger.error(f"Database connection error: {e}")
-        raise
-    finally:
-        if conn and conn.is_connected():
-            conn.close()
-
-def link_resident(unit: str, alexa_user_id: str, region: str = "NA") -> bool:
-    """INSERT or UPDATE a resident's Alexa account link."""
-    try:
-        with get_connection_context() as conn:
-            cursor = conn.cursor()
+        cursor = conn.cursor()
+        
+        # First, check if this Alexa user is already linked to another unit
+        cursor.execute(
+            "SELECT * FROM residents WHERE alexa_user_id = %s",
+            (alexa_user_id,)
+        )
+        existing = cursor.fetchone()
+        
+        if existing:
+            # Update the existing record with new unit
             cursor.execute(
                 """
-                INSERT INTO residents (unit, alexa_user_id, alexa_region, opted_in, linked_at)
-                VALUES (%s, %s, %s, TRUE, NOW())
-                ON DUPLICATE KEY UPDATE
-                    alexa_user_id = VALUES(alexa_user_id),
-                    alexa_region = VALUES(alexa_region),
-                    opted_in = TRUE,
-                    linked_at = NOW()
+                UPDATE residents 
+                SET unit = %s, alexa_region = %s, opted_in = TRUE, linked_at = NOW()
+                WHERE alexa_user_id = %s
                 """,
-                (unit, alexa_user_id, region)
+                (unit, region, alexa_user_id)
             )
             conn.commit()
             cursor.close()
+            conn.close()
+            logger.info(f"✅ Updated existing resident: unit={unit}, alexa_user_id={alexa_user_id[:20]}...")
             return True
+        
+        # Check if unit is already linked to another Alexa user
+        cursor.execute(
+            "SELECT * FROM residents WHERE unit = %s",
+            (unit,)
+        )
+        unit_existing = cursor.fetchone()
+        
+        if unit_existing:
+            # Unit exists but no Alexa user linked yet (alexa_user_id is NULL)
+            cursor.execute(
+                """
+                UPDATE residents 
+                SET alexa_user_id = %s, alexa_region = %s, opted_in = TRUE, linked_at = NOW()
+                WHERE unit = %s
+                """,
+                (alexa_user_id, region, unit)
+            )
+            conn.commit()
+            cursor.close()
+            conn.close()
+            logger.info(f"✅ Updated unit {unit} with Alexa user: {alexa_user_id[:20]}...")
+            return True
+        
+        # New resident - insert
+        cursor.execute(
+            """
+            INSERT INTO residents (unit, alexa_user_id, alexa_region, opted_in, linked_at)
+            VALUES (%s, %s, %s, TRUE, NOW())
+            """,
+            (unit, alexa_user_id, region)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+        logger.info(f"✅ Created new resident: unit={unit}, alexa_user_id={alexa_user_id[:20]}...")
+        return True
+        
     except Error as e:
-        logger.error(f"link_resident error: {e}")
+        logger.error(f"❌ link_resident error: {e}")
         return False
 
 def get_resident_by_alexa_id(alexa_user_id: str):
-    """SELECT — used to find which unit an Alexa account belongs to."""
     try:
-        with get_connection_context() as conn:
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute(
-                "SELECT * FROM residents WHERE alexa_user_id = %s AND opted_in = TRUE",
-                (alexa_user_id,)
-            )
-            result = cursor.fetchone()
-            cursor.close()
-            return result
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT * FROM residents WHERE alexa_user_id = %s AND opted_in = TRUE",
+            (alexa_user_id,)
+        )
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return result
     except Error as e:
         logger.error(f"get_resident_by_alexa_id error: {e}")
         return None
 
 def get_resident_by_unit(unit: str):
-    """SELECT — used by the webhook to find a resident's Alexa account."""
     try:
-        with get_connection_context() as conn:
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute(
-                "SELECT * FROM residents WHERE unit = %s AND opted_in = TRUE",
-                (unit,)
-            )
-            result = cursor.fetchone()
-            cursor.close()
-            return result
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT * FROM residents WHERE unit = %s AND opted_in = TRUE",
+            (unit,)
+        )
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return result
     except Error as e:
         logger.error(f"get_resident_by_unit error: {e}")
         return None
 
-def save_package(resident_id: int, package_id: str, carrier: str,
-                  tracking_number: str, compartment: str, delivered_at: str) -> int:
-    """INSERT a new package row, returns the new package's id."""
+def get_resident_by_address(address: str):
     try:
-        logger.info(f"📝 save_package called: resident_id={resident_id}, package_id={package_id}, carrier={carrier}")
-        
-        with get_connection_context() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO packages
-                    (resident_id, package_id, carrier, tracking_number, compartment, delivered_at)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                """,
-                (resident_id, package_id, carrier, tracking_number, compartment, delivered_at)
-            )
-            conn.commit()
-            new_id = cursor.lastrowid
-            cursor.close()
-            logger.info(f"✅ Package saved successfully with ID: {new_id}")
-            return new_id
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT * FROM residents WHERE unit = %s",
+            (address,)
+        )
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return result
     except Error as e:
-        logger.error(f"❌ save_package error: {e}")
+        logger.error(f"get_resident_by_address error: {e}")
         return None
-def get_packages_for_unit(unit: str):
-    """SELECT — all packages for a unit, joined through residents."""
+
+def save_or_update_package(resident_id: int, package_id: str, carrier: str,
+                           tracking_number: str, compartment: str, delivered_at: str):
+    """Insert or update package. Returns (package_row, is_new)."""
+    logger.info(f"📝 save_or_update_package called: resident_id={resident_id}, package_id={package_id}")
+    
     try:
-        with get_connection_context() as conn:
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute(
+        # Check if package exists - use a fresh connection
+        conn1 = get_connection()
+        cursor1 = conn1.cursor(dictionary=True)
+        cursor1.execute(
+            "SELECT * FROM packages WHERE package_id = %s AND resident_id = %s",
+            (package_id, resident_id)
+        )
+        existing = cursor1.fetchone()
+        cursor1.close()
+        conn1.close()
+        
+        logger.info(f"🔍 Existing package: {existing}")
+        
+        if existing:
+            # Update - use a fresh connection
+            conn2 = get_connection()
+            cursor2 = conn2.cursor()
+            cursor2.execute(
                 """
-                SELECT p.* FROM packages p
-                JOIN residents r ON p.resident_id = r.id
-                WHERE r.unit = %s
-                ORDER BY p.delivered_at DESC
+                UPDATE packages 
+                SET carrier = %s, tracking_number = %s, compartment = %s, 
+                    delivered_at = %s
+                WHERE id = %s
                 """,
-                (unit,)
+                (carrier, tracking_number, compartment, delivered_at, existing['id'])
             )
-            results = cursor.fetchall()
-            cursor.close()
-            return results
+            conn2.commit()
+            cursor2.close()
+            
+            # Fetch updated record - use a fresh connection
+            conn3 = get_connection()
+            cursor3 = conn3.cursor(dictionary=True)
+            cursor3.execute(
+                "SELECT * FROM packages WHERE id = %s",
+                (existing['id'],)
+            )
+            updated = cursor3.fetchone()
+            cursor3.close()
+            conn3.close()
+            
+            logger.info(f"✅ Package updated: {updated}")
+            return updated, False
+        
+        # Insert new package - use a fresh connection
+        conn2 = get_connection()
+        cursor2 = conn2.cursor()
+        cursor2.execute(
+            """
+            INSERT INTO packages 
+                (resident_id, package_id, carrier, tracking_number, compartment, delivered_at)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (resident_id, package_id, carrier, tracking_number, compartment, delivered_at)
+        )
+        conn2.commit()
+        new_id = cursor2.lastrowid
+        cursor2.close()
+        conn2.close()
+        
+        logger.info(f"📝 New package ID: {new_id}")
+        
+        # Fetch new record - use a fresh connection
+        conn3 = get_connection()
+        cursor3 = conn3.cursor(dictionary=True)
+        cursor3.execute(
+            "SELECT * FROM packages WHERE id = %s",
+            (new_id,)
+        )
+        new_row = cursor3.fetchone()
+        cursor3.close()
+        conn3.close()
+        
+        logger.info(f"✅ New package inserted: {new_row}")
+        return new_row, True
+        
+    except Error as e:
+        logger.error(f"❌ save_or_update_package error: {e}")
+        return None, False
+
+def mark_package_notified(package_row_id: int):
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE packages SET notification_status = 'notified', last_notified_at = NOW() WHERE id = %s",
+            (package_row_id,)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Error as e:
+        logger.error(f"mark_package_notified error: {e}")
+
+def increment_reminder(package_row_id: int):
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE packages SET reminder_count = reminder_count + 1, last_notified_at = NOW() WHERE id = %s",
+            (package_row_id,)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Error as e:
+        logger.error(f"increment_reminder error: {e}")
+
+def get_packages_for_unit(unit: str):
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT p.* FROM packages p
+            JOIN residents r ON p.resident_id = r.id
+            WHERE r.unit = %s
+            ORDER BY p.delivered_at DESC
+            """,
+            (unit,)
+        )
+        results = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return results
     except Error as e:
         logger.error(f"get_packages_for_unit error: {e}")
         return []
 
-def log_notification(package_row_id: int, amazon_request_id: str, status: str):
-    """INSERT into notification_log — tracks every send attempt."""
+def log_notification(package_row_id: int, amazon_request_id, status: str, status_reason: str = None):
     try:
-        with get_connection_context() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO notification_log (package_id, amazon_request_id, status)
-                VALUES (%s, %s, %s)
-                """,
-                (package_row_id, amazon_request_id, status)
-            )
-            conn.commit()
-            cursor.close()
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT INTO notification_log (package_id, amazon_request_id, status, status_reason) 
+               VALUES (%s, %s, %s, %s)""",
+            (package_row_id, amazon_request_id, status, status_reason)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
     except Error as e:
         logger.error(f"log_notification error: {e}")

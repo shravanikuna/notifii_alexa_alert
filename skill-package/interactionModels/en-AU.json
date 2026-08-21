@@ -13,9 +13,13 @@
             "list my packages",
             "package update",
             "any packages for me",
-            "are there any packages",
-            "check packages",
-            "my packages"
+            "do i have any notifications",
+            "any notifications",
+            "check notifications",
+            "what are my packages",
+            "show me my packages",
+            "do i have new packages",
+            "any new packages"
           ]
         },
         {
@@ -29,9 +33,49 @@
             "tell me more",
             "details",
             "tell me about the package",
+            "give me more details",
+            "more details",
+            "tell me about the {carrier} package",
+            "details about the {carrier} package",
+            "information about the {carrier} package",
+            "tell me about the {carrier} one",
+            "more about the {carrier} package",
+            "give me details about the {carrier} package",
+            "details for {carrier}",
+            "about {carrier}",
             "tell me about {carrier}",
-            "details about {carrier}",
-            "information about {carrier}"
+            "give me details about {carrier}",
+            "give me more details {carrier} package",
+            "more details {carrier}",
+            "details of {carrier} package",
+            "give me more details for tracking number {tracking}",
+            "details for tracking {tracking}",
+            "tracking number {tracking}",
+            "the package with tracking number {tracking}"
+          ],
+          "slots": [
+            {
+              "name": "carrier",
+              "type": "AMAZON.SearchQuery"
+            },
+            {
+              "name": "tracking",
+              "type": "AMAZON.SearchQuery"
+            }
+          ]
+        },
+        {
+          "name": "WhichPackageIntent",
+          "samples": [
+            "the {carrier} package",
+            "package from {carrier}",
+            "the {carrier} one",
+            "the one from {carrier}",
+            "{carrier} package",
+            "about the {carrier} one",
+            "give me the {carrier} package",
+            "show me the {carrier} package",
+            "the package from {carrier}"
           ],
           "slots": [
             {
@@ -51,7 +95,21 @@
             "who shipped it",
             "which carrier",
             "who delivered my package",
-            "carrier name"
+            "carrier name",
+            "delivery service",
+            "what is the carrier",
+            "what carrier for tracking {tracking}",
+            "who delivered the package with tracking {tracking}"
+          ],
+          "slots": [
+            {
+              "name": "carrier",
+              "type": "AMAZON.SearchQuery"
+            },
+            {
+              "name": "tracking",
+              "type": "AMAZON.SearchQuery"
+            }
           ]
         },
         {
@@ -64,7 +122,23 @@
             "do you have a tracking number",
             "give me the tracking number",
             "what is the tracking number",
-            "tracking ID"
+            "tracking ID",
+            "show me the tracking number",
+            "get tracking",
+            "what is the tracking",
+            "tracking",
+            "what's the tracking number for the {carrier} package",
+            "tracking number for {carrier}"
+          ],
+          "slots": [
+            {
+              "name": "carrier",
+              "type": "AMAZON.SearchQuery"
+            },
+            {
+              "name": "tracking",
+              "type": "AMAZON.SearchQuery"
+            }
           ]
         },
         {
@@ -77,7 +151,24 @@
             "where is my package",
             "package location",
             "which locker",
-            "where can I find it"
+            "where can I find it",
+            "compartment location",
+            "where is the package",
+            "what is the compartment",
+            "in which compartment the {carrier} package is stored",
+            "in which compartment the package with tracking number {tracking} is stored",
+            "which compartment for {carrier}",
+            "compartment for tracking {tracking}"
+          ],
+          "slots": [
+            {
+              "name": "carrier",
+              "type": "AMAZON.SearchQuery"
+            },
+            {
+              "name": "tracking",
+              "type": "AMAZON.SearchQuery"
+            }
           ]
         },
         {
@@ -90,7 +181,20 @@
             "when did it arrive",
             "delivered when",
             "delivery day",
-            "arrival time"
+            "arrival time",
+            "arrival date",
+            "when was the {carrier} package delivered",
+            "delivery date for tracking {tracking}"
+          ],
+          "slots": [
+            {
+              "name": "carrier",
+              "type": "AMAZON.SearchQuery"
+            },
+            {
+              "name": "tracking",
+              "type": "AMAZON.SearchQuery"
+            }
           ]
         },
         {
@@ -105,7 +209,9 @@
             "done",
             "that's it",
             "no thanks",
-            "not now"
+            "not now",
+            "all done",
+            "good night"
           ]
         },
         {
@@ -123,9 +229,107 @@
         {
           "name": "AMAZON.FallbackIntent",
           "samples": []
+        },
+        {
+          "name": "AMAZON.YesIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NoIntent",
+          "samples": []
+        },
+        {
+          "name": "LinkUnitIntent",
+          "slots": [
+            {
+              "name": "unit",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "link my unit {unit}",
+            "my unit is {unit}",
+            "unit {unit}",
+            "set unit {unit}",
+            "register unit {unit}"
+          ]
         }
       ],
-      "types": []
+      "types": [
+        {
+          "name": "CARRIER_TYPE",
+          "values": [
+            {
+              "name": {
+                "value": "Amazon",
+                "synonyms": [
+                  "amazon",
+                  "amazon package",
+                  "amazon delivery",
+                  "amazon logistics"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "UPS",
+                "synonyms": [
+                  "ups",
+                  "ups package",
+                  "ups delivery",
+                  "u p s"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "FedEx",
+                "synonyms": [
+                  "fedex",
+                  "fed ex",
+                  "fedex package",
+                  "fedex delivery",
+                  "f e d e x"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "USPS",
+                "synonyms": [
+                  "usps",
+                  "post office",
+                  "postal",
+                  "u s p s",
+                  "united states postal service"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "DHL",
+                "synonyms": [
+                  "dhl",
+                  "d h l",
+                  "dhl package",
+                  "dhl delivery",
+                  "d h l express"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "OnTrac",
+                "synonyms": [
+                  "ontrac",
+                  "on trac",
+                  "on-trac"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   }
 }
