@@ -65,12 +65,12 @@ def link_account_id_to_alexa(account_id: str, alexa_user_id: str, region: str = 
         return False
 
 def get_resident_by_account_id(account_id: str):
-    """Get resident by account_id."""
     try:
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
-            "SELECT * FROM residents WHERE account_id = %s AND opted_in = TRUE",
+            # ✅ Use the actual column name "account_ic"
+            "SELECT * FROM residents WHERE account_ic = %s AND opted_in = TRUE",
             (account_id,)
         )
         result = cursor.fetchone()
