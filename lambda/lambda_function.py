@@ -306,9 +306,9 @@ class LaunchRequestHandler(AbstractRequestHandler):
         resident = db.get_resident_by_alexa_id(alexa_user_id)
 
         if not resident:
-            # Genuinely unrecognized account — only case where linking is needed
-            speak_output = "Welcome to Notifii Alert. Please say your unit number to link your account."
-            return handler_input.response_builder.speak(speak_output).ask("What's your unit number?").response
+            # Account not yet linked (shouldn't happen once OAuth linking is live)
+            speak_output = "Welcome to Notifii Alert. Your account isn't linked yet — please enable notifications in the app to get started."
+            return handler_input.response_builder.speak(speak_output).response
 
         CURRENT_UNIT = resident['unit']
         CURRENT_RESIDENT_ID = resident['id']
@@ -319,7 +319,6 @@ class LaunchRequestHandler(AbstractRequestHandler):
         else:
             speak_output = "Welcome to Notifii Alert. You have no packages right now."
         return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
-
 
 class LinkUnitIntentHandler(AbstractRequestHandler):
     """Fallback only — used when a resident's row genuinely has no alexa_user_id yet."""
