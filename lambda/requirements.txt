@@ -3,3 +3,4 @@ flask-ask-sdk
 python-dotenv
 requests
 mysql-connector-python
+gunicorn
