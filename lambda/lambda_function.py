@@ -21,15 +21,10 @@ class Config:
     ALEXA_API_URL = os.environ.get('ALEXA_API_URL', '').strip()
 
 config = Config()
-CURRENT_UNIT = None
 CURRENT_RESIDENT_ID = None
+SESSION_GAP_THRESHOLD_DAYS = 2
 
-SESSION_GAP_THRESHOLD_DAYS = 2  # per spec: 2+ days gap => report ALL packages again
 
-
-# ============================================
-# ALEXA PROACTIVE EVENTS CLIENT
-# ============================================
 class AlexaProactiveEventsClient:
     def __init__(self):
         self.client_id = config.ALEXA_CLIENT_ID
@@ -92,9 +87,6 @@ class AlexaProactiveEventsClient:
 alexa_client = AlexaProactiveEventsClient()
 
 
-# ============================================
-# HELPERS
-# ============================================
 def parse_iso_to_mysql_datetime(iso_string: Optional[str]) -> Optional[str]:
     if not iso_string:
         return None
@@ -130,10 +122,7 @@ def _format_dt(delivered_at):
     if not delivered_at:
         return 'recently'
     try:
-        if isinstance(delivered_at, str):
-            dt = datetime.strptime(delivered_at, '%Y-%m-%d %H:%M:%S')
-        else:
-            dt = delivered_at
+        dt = datetime.strptime(delivered_at, '%Y-%m-%d %H:%M:%S') if isinstance(delivered_at, str) else delivered_at
         return dt.strftime('%B %d, %Y at %I:%M %p')
     except Exception:
         return str(delivered_at)
@@ -158,20 +147,14 @@ def get_package_summary(packages: List[Dict]) -> str:
     return f"You have {', '.join(descriptions[:-1])}, and {descriptions[-1]}. If you want to know more about any package, just ask me."
 
 def get_current_packages() -> List[Dict]:
-    """Full package list for CURRENT_RESIDENT — used for in-session follow-up detail questions."""
     if not CURRENT_RESIDENT_ID:
         return []
     return db.get_all_packages_for_resident(CURRENT_RESIDENT_ID)
 
 def get_status_report_packages(resident: Dict) -> List[Dict]:
-    """
-    Implements the 'only tell them what they haven't heard' rule:
-      - Gap since last session >= 2 days -> report ALL packages, mark ALL heard
-      - Otherwise -> report only unheard packages, mark those heard
-    """
+    """Only report what the resident hasn't heard, unless a 2+ day gap means report everything again."""
     resident_id = resident['id']
     last_session_at = resident.get('last_session_at')
-
     gap_days = None
     if last_session_at:
         try:
@@ -187,7 +170,6 @@ def get_status_report_packages(resident: Dict) -> List[Dict]:
     if packages:
         db.mark_packages_heard([p['id'] for p in packages])
     db.update_last_session(resident_id)
-
     return packages
 
 
@@ -231,15 +213,10 @@ def resolve_package(handler_input, packages: List[Dict]):
     return ("no_selector", None)
 
 
-# ============================================
-# WEBHOOK HANDLER
-# ============================================
 def handle_package_event(event: Dict, context: Any) -> Dict:
     logger.info(f"📦 Webhook event received: {event}")
     data = event.get('data', {})
-    
-    # Use account_id as the primary identifier
-    account_id = data.get('account_id')
+    address = data.get('unit')
     package_id = data.get('package_id')
     carrier = data.get('carrier', 'courier')
     tracking_number = data.get('tracking_number')
@@ -247,79 +224,68 @@ def handle_package_event(event: Dict, context: Any) -> Dict:
     delivered_at_raw = data.get('delivered_at')
     delivered_at = parse_iso_to_mysql_datetime(delivered_at_raw)
 
-    if not account_id or not package_id:
-        return {"status": "error", "message": "Missing account_id or package_id"}
+    if not address or not package_id:
+        return {"status": "error", "message": "Missing address or package_id"}
 
-    # ✅ Look up resident by account_id
-    resident = db.get_resident_by_account_id(account_id)
+    resident = db.get_resident_by_address(address)
     if not resident:
-        return {"status": "error", "message": f"No resident found for account_id: {account_id}"}
+        return {"status": "error", "message": f"No resident found for address: {address}"}
 
-    # ... rest of the logic remains the same
+    alexa_user_id = resident.get('alexa_user_id')
 
-# ============================================
-# INTENT HANDLERS
-# ============================================
+    package_row, is_new = db.save_or_update_package(
+        resident_id=resident['id'], package_id=package_id, carrier=carrier,
+        tracking_number=tracking_number, compartment=compartment, delivered_at=delivered_at
+    )
+    if not package_row:
+        return {"status": "error", "message": "Failed to save package to database"}
 
-class SkillEnabledHandler(AbstractRequestHandler):
-    def can_handle(self, handler_input):
-        return ask_utils.is_request_type("AlexaSkillEvent.SkillEnabled")(handler_input)
+    if not alexa_user_id:
+        db.log_notification(package_row['id'], None, "failed", "No Alexa account linked")
+        return {"status": "skipped_notification", "package_id": package_id, "reason": "no_alexa_link"}
 
-    def handle(self, handler_input):
-        user_id = handler_input.request_envelope.context.system.user.user_id
-        logger.info(f"✅ SkillEnabled fired for user: {user_id}")
-        db.register_enabled_user(user_id, region="EU")
-        return handler_input.response_builder.response
+    if is_new:
+        result = alexa_client.send_notification(alexa_user_id, carrier, package_id, tracking_number, compartment, delivered_at_raw, address)
+        if result.get('status') == 'success':
+            db.mark_package_notified(package_row['id'])
+            db.log_notification(package_row['id'], None, "sent", "Initial delivery notification")
+            return {"status": "success", "package_id": package_id, "message": "New package notification sent"}
+        db.log_notification(package_row['id'], None, "failed", result.get('message'))
+        return {"status": "error", "package_id": package_id, "error": result.get('message')}
+
+    days_waiting = calculate_waiting_days(delivered_at_raw)
+    reminder_thresholds = [3, 5, 7]
+    current_reminder_count = package_row.get('reminder_count', 0)
+
+    if days_waiting in reminder_thresholds and current_reminder_count < reminder_thresholds.index(days_waiting) + 1:
+        result = alexa_client.send_notification(alexa_user_id, carrier, package_id, tracking_number, compartment, delivered_at_raw, address)
+        if result.get('status') == 'success':
+            db.increment_reminder(package_row['id'])
+            db.log_notification(package_row['id'], None, "sent", f"Day {days_waiting} reminder")
+            return {"status": "success", "package_id": package_id, "message": f"Day {days_waiting} reminder sent"}
+        db.log_notification(package_row['id'], None, "failed", result.get('message'))
+        return {"status": "error", "package_id": package_id, "error": result.get('message')}
+
+    return {"status": "no_action", "package_id": package_id, "reason": "already notified, not due for reminder"}
+
 
 class LaunchRequestHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
         return ask_utils.is_request_type("LaunchRequest")(handler_input)
 
     def handle(self, handler_input):
+        global CURRENT_RESIDENT_ID
         alexa_user_id = handler_input.request_envelope.context.system.user.user_id
-        logger.info(f"🚀 User {alexa_user_id[:20]}... launching")
-        
-        # Check if this Alexa user is already linked to an account
         resident = db.get_resident_by_alexa_id(alexa_user_id)
-        
-        if resident:
-            # ✅ Fully linked user
-            CURRENT_UNIT = resident.get('unit')
-            packages = get_current_packages()
-            speak_output = "Welcome to Notifii Alert. " + (get_package_summary(packages) if packages else "You have no packages right now.")
-            return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
-        
-        # ⚠️ User enabled skill but Notifii hasn't linked yet
-        speak_output = "Welcome to Notifii Alert. Please enable notifications in the Notifii app to receive package alerts."
-        return handler_input.response_builder.speak(speak_output).response
-class LinkUnitIntentHandler(AbstractRequestHandler):
-    """Fallback only — used when a resident's row genuinely has no alexa_user_id yet."""
-    def can_handle(self, handler_input):
-        return ask_utils.is_intent_name("LinkUnitIntent")(handler_input)
 
-    def handle(self, handler_input):
-        global CURRENT_UNIT, CURRENT_RESIDENT_ID
-        alexa_user_id = handler_input.request_envelope.context.system.user.user_id
-        unit_value = get_slot_value(handler_input, 'unit')
-
-        if not unit_value:
-            speak_output = "Which unit number should I link?"
-            return handler_input.response_builder.speak(speak_output).ask(speak_output).response
-
-        resident = db.get_resident_by_address(unit_value)
-        if resident and resident.get('alexa_user_id') and resident['alexa_user_id'] != alexa_user_id:
-            speak_output = f"Unit {unit_value} is already linked to another account. Please contact support."
+        if not resident:
+            speak_output = "Welcome to Notifii Alert."
             return handler_input.response_builder.speak(speak_output).response
 
-        success = db.link_resident(unit_value, alexa_user_id, region="EU")
-        if success:
-            CURRENT_UNIT = unit_value
-            resident = db.get_resident_by_address(unit_value)
-            CURRENT_RESIDENT_ID = resident['id'] if resident else None
-            speak_output = f"Got it. Unit {unit_value} is now linked for package notifications."
-        else:
-            speak_output = "Sorry, I couldn't link your unit right now. Please try again."
-        return handler_input.response_builder.speak(speak_output).response
+        CURRENT_RESIDENT_ID = resident['id']
+        packages = get_status_report_packages(resident)
+        speak_output = "Welcome to Notifii Alert. " + (get_package_summary(packages) if packages else "You have no packages right now.")
+        return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
 
 
 class PackageStatusIntentHandler(AbstractRequestHandler):
@@ -330,13 +296,13 @@ class PackageStatusIntentHandler(AbstractRequestHandler):
         alexa_user_id = handler_input.request_envelope.context.system.user.user_id
         resident = db.get_resident_by_alexa_id(alexa_user_id)
         if not resident:
-            speak_output = "It looks like your account isn't linked yet. Please say your unit number to link it."
-            return handler_input.response_builder.speak(speak_output).ask("What's your unit number?").response
+            return handler_input.response_builder.speak("You have no packages right now.").response
 
+        global CURRENT_RESIDENT_ID
+        CURRENT_RESIDENT_ID = resident['id']
         packages = get_status_report_packages(resident)
         if not packages:
             return handler_input.response_builder.speak("You don't have any new notifications right now.").response
-
         speak_output = get_package_summary(packages)
         return handler_input.response_builder.speak(speak_output).ask("Would you like details about any package?").response
 
@@ -530,8 +496,6 @@ class SessionEndedRequestHandler(AbstractRequestHandler):
 
 
 sb = SkillBuilder()
-sb.add_request_handler(SkillEnabledHandler())
-sb.add_request_handler(LinkUnitIntentHandler())
 sb.add_request_handler(SkillPermissionChangedHandler())
 sb.add_request_handler(SkillDisabledHandler())
 sb.add_request_handler(SessionEndedRequestHandler())

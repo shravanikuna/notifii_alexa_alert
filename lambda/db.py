@@ -22,125 +22,10 @@ def get_connection():
     except Error as e:
         logger.error(f"Database connection error: {e}")
         raise
-def link_account_id_to_alexa(account_id: str, alexa_user_id: str, region: str = "NA") -> bool:
-    """Link an account_id to an alexa_user_id."""
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        
-        # Check if account_id already exists
-        cursor.execute(
-            "SELECT * FROM residents WHERE account_id = %s",
-            (account_id,)
-        )
-        existing = cursor.fetchone()
-        
-        if existing:
-            # Update existing record with alexa_user_id
-            cursor.execute(
-                """
-                UPDATE residents 
-                SET alexa_user_id = %s, alexa_region = %s, opted_in = TRUE, linked_at = NOW()
-                WHERE account_id = %s
-                """,
-                (alexa_user_id, region, account_id)
-            )
-        else:
-            # Create new resident record
-            cursor.execute(
-                """
-                INSERT INTO residents (account_id, alexa_user_id, alexa_region, opted_in, linked_at)
-                VALUES (%s, %s, %s, TRUE, NOW())
-                """,
-                (account_id, alexa_user_id, region)
-            )
-        
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return True
-        
-    except Error as e:
-        logger.error(f"link_account_id_to_alexa error: {e}")
-        return False
-
-def get_resident_by_account_id(account_id: str):
-    try:
-        conn = get_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute(
-            # ✅ Use the actual column name "account_ic"
-            "SELECT * FROM residents WHERE account_ic = %s AND opted_in = TRUE",
-            (account_id,)
-        )
-        result = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        return result
-    except Error as e:
-        logger.error(f"get_resident_by_account_id error: {e}")
-        return None
-
-def register_enabled_user(alexa_user_id: str, region: str = "EU"):
-    """Called automatically when SkillEnabled fires. Creates a pending row if unit isn't known yet."""
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM residents WHERE alexa_user_id = %s", (alexa_user_id,))
-        if cursor.fetchone():
-            cursor.close(); conn.close()
-            return  # already known
-        cursor.execute(
-            "INSERT INTO residents (unit, alexa_user_id, alexa_region, opted_in, pending, linked_at) "
-            "VALUES (NULL, %s, %s, TRUE, TRUE, NOW())",
-            (alexa_user_id, region)
-        )
-        conn.commit(); cursor.close(); conn.close()
-        logger.info(f"Registered pending resident for {alexa_user_id[:20]}...")
-    except Error as e:
-        logger.error(f"register_enabled_user error: {e}")
-
-def link_resident(unit: str, alexa_user_id: str, region: str = "NA") -> bool:
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM residents WHERE alexa_user_id = %s", (alexa_user_id,))
-        existing = cursor.fetchone()
-        if existing:
-            cursor.execute(
-                "UPDATE residents SET unit = %s, alexa_region = %s, opted_in = TRUE, linked_at = NOW() WHERE alexa_user_id = %s",
-                (unit, region, alexa_user_id)
-            )
-            conn.commit(); cursor.close(); conn.close()
-            return True
-
-        cursor.execute("SELECT * FROM residents WHERE unit = %s", (unit,))
-        unit_existing = cursor.fetchone()
-        if unit_existing:
-            cursor.execute(
-                "UPDATE residents SET alexa_user_id = %s, alexa_region = %s, opted_in = TRUE, linked_at = NOW() WHERE unit = %s",
-                (alexa_user_id, region, unit)
-            )
-            conn.commit(); cursor.close(); conn.close()
-            return True
-
-        cursor.execute(
-            "INSERT INTO residents (unit, alexa_user_id, alexa_region, opted_in, linked_at) VALUES (%s, %s, %s, TRUE, NOW())",
-            (unit, alexa_user_id, region)
-        )
-        conn.commit(); cursor.close(); conn.close()
-        return True
-    except Error as e:
-        logger.error(f"link_resident error: {e}")
-        return False
 
 
 def get_resident_by_alexa_id(alexa_user_id: str):
-    """
-    IMPORTANT: no longer requires opted_in = TRUE to recognize the user.
-    opted_in only gates whether PROACTIVE webhook notifications are sent —
-    it should never block Alexa from recognizing an already-linked resident.
-    """
+    """Used by LaunchRequestHandler / PackageStatusIntentHandler to recognize the caller."""
     try:
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
@@ -154,6 +39,7 @@ def get_resident_by_alexa_id(alexa_user_id: str):
 
 
 def get_resident_by_address(address: str):
+    """Used by the webhook handler to match Notifii's 'unit' (address) field to a resident."""
     try:
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
@@ -283,22 +169,6 @@ def update_last_session(resident_id: int):
         conn.commit(); cursor.close(); conn.close()
     except Error as e:
         logger.error(f"update_last_session error: {e}")
-
-
-def get_packages_for_unit(unit: str):
-    try:
-        conn = get_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute(
-            "SELECT p.* FROM packages p JOIN residents r ON p.resident_id = r.id WHERE r.unit = %s ORDER BY p.delivered_at DESC",
-            (unit,)
-        )
-        results = cursor.fetchall()
-        cursor.close(); conn.close()
-        return results
-    except Error as e:
-        logger.error(f"get_packages_for_unit error: {e}")
-        return []
 
 
 def log_notification(package_row_id: int, amazon_request_id, status: str, status_reason: str = None):
