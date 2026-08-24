@@ -24,10 +24,6 @@
           "samples": []
         },
         {
-          "name": "LaunchRequest",
-          "samples": []
-        },
-        {
           "name": "PackageStatusIntent",
           "slots": [],
           "samples": [
@@ -50,19 +46,26 @@
             }
           ],
           "samples": [
+            "more details",
+            "give me more details",
             "more information",
             "give me more information",
             "tell me more",
-            "more details",
-            "give me details",
-            "details please",
             "more info",
-            "tell me everything",
+            "details please",
             "full details",
             "more about my package",
-            "tell me more about {tracking}",
+            "tell me everything",
+            "details",
+            "information",
+            "give details",
+            "show me details",
+            "more about it",
+            "tell me more about it",
+            "more about {tracking}",
             "details about {tracking}",
-            "info about {tracking}"
+            "info about {tracking}",
+            "give me details for {tracking}"
           ]
         },
         {
@@ -82,7 +85,8 @@
             "package location",
             "where can I find {tracking}",
             "where is it",
-            "location"
+            "location",
+            "compartment"
           ]
         },
         {
