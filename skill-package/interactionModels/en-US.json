@@ -27,25 +27,119 @@
           "name": "PackageStatusIntent",
           "slots": [],
           "samples": [
-            "ask Notifii Alert for my packages",
-            "ask Notifii Alert to check mailroom",
-            "what does Notifii Alert have for me",
-            "get my Notifii Alert packages",
-            "check Notifii Alert mailroom",
-            "show Notifii Alert packages",
-            "mailroom packages from Notifii Alert",
-            "ask Notifii Alert what is waiting"
+            "what packages do I have",
+            "do I have any packages",
+            "tell me my packages",
+            "check my packages",
+            "package status",
+            "any deliveries",
+            "show me my packages"
+          ]
+        },
+        {
+          "name": "PackageDetailsIntent",
+          "slots": [
+            {
+              "name": "tracking",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "more information about {tracking}",
+            "tell me more about {tracking}",
+            "details about {tracking}",
+            "give me details for {tracking}",
+            "info about {tracking}",
+            "more details"
           ]
         },
         {
           "name": "CompartmentInquiryIntent",
-          "slots": [],
+          "slots": [
+            {
+              "name": "tracking",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
           "samples": [
+            "where is it stored",
+            "where is {tracking} stored",
+            "which compartment",
+            "what locker",
             "where is my package",
-            "what compartment",
-            "which locker",
             "package location",
-            "compartment number"
+            "where can I find {tracking}"
+          ]
+        },
+        {
+          "name": "DeliveryInquiryIntent",
+          "slots": [
+            {
+              "name": "tracking",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "when did it arrive",
+            "when was {tracking} delivered",
+            "delivery date",
+            "when did {tracking} arrive",
+            "what time was it delivered",
+            "delivery time"
+          ]
+        },
+        {
+          "name": "CarrierInquiryIntent",
+          "slots": [
+            {
+              "name": "carrier",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "who delivered it",
+            "what carrier",
+            "who shipped {carrier}",
+            "carrier name",
+            "delivery company"
+          ]
+        },
+        {
+          "name": "TrackingInquiryIntent",
+          "slots": [
+            {
+              "name": "tracking",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "what is the tracking number",
+            "tracking number for {tracking}",
+            "give me tracking info"
+          ]
+        },
+        {
+          "name": "WhichPackageIntent",
+          "slots": [
+            {
+              "name": "tracking",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "which package",
+            "the {tracking} package",
+            "what about {tracking}"
+          ]
+        },
+        {
+          "name": "ExitIntent",
+          "samples": [
+            "exit",
+            "quit",
+            "bye",
+            "goodbye",
+            "close"
           ]
         }
       ],

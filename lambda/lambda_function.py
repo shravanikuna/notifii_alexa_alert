@@ -150,6 +150,7 @@ def format_package_details(package: Dict) -> str:
     tracking = package.get('tracking_number', 'no tracking number')
     compartment = package.get('compartment', 'unknown compartment')
     delivered_at = package.get('delivered_at')
+    package_id = package.get('package_id', 'unknown')
     
     if delivered_at:
         try:
@@ -157,21 +158,22 @@ def format_package_details(package: Dict) -> str:
                 dt = datetime.strptime(delivered_at, '%Y-%m-%d %H:%M:%S')
             else:
                 dt = delivered_at
-            delivered_str = dt.strftime('%B %d, %Y at %I:%M %p')
+            delivered_str = dt.strftime('%B %d, %Y at %I:%M %p IST')
+            waiting_days = calculate_waiting_days(delivered_at)
+            if waiting_days == 0:
+                time_str = "today"
+            elif waiting_days == 1:
+                time_str = "yesterday"
+            else:
+                time_str = f"{waiting_days} days ago"
         except Exception:
             delivered_str = str(delivered_at)
+            time_str = ""
     else:
         delivered_str = 'recently'
+        time_str = ""
     
-    waiting_days = calculate_waiting_days(delivered_at)
-    if waiting_days == 0:
-        waiting_str = "arrived today"
-    elif waiting_days == 1:
-        waiting_str = "arrived 1 day ago"
-    else:
-        waiting_str = f"arrived {waiting_days} days ago"
-    
-    return f"Package from {carrier}, tracking number {tracking}, stored in compartment {compartment}, delivered on {delivered_str}, {waiting_str}"
+    return f"Package from {carrier}, tracking number {tracking}, stored in compartment {compartment}, delivered on {delivered_str} ({time_str})."
 
 def format_all_package_details(packages: List[Dict]) -> str:
     return " Also, ".join(format_package_details(p) for p in packages)
@@ -403,27 +405,106 @@ class PackageDetailsIntentHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         packages = get_packages_for_user(CURRENT_UNIT)
         if not packages:
-            return handler_input.response_builder.speak("You have no packages to get details about.").response
+            return handler_input.response_builder.speak("You have no packages.").response
 
         session_attr = handler_input.attributes_manager.session_attributes
-        status, found = resolve_package(handler_input, packages)
-
-        if status == "resolved":
+        tracking_value = get_slot_value(handler_input, 'tracking')
+        
+        # ✅ If user said "more information" without specific tracking
+        if not tracking_value:
+            # If only one package, give its details
+            if len(packages) == 1:
+                session_attr['current_package'] = packages[0]
+                speak_output = format_package_details(packages[0])
+                return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
+            
+            # Multiple packages - ask which one
+            speak_output = "Which package would you like more information about? " + get_package_summary(packages)
+            return handler_input.response_builder.speak(speak_output).ask("Please specify the tracking number or carrier.").response
+        
+        # ✅ Find the specific package
+        found = PackageMatcher.match(packages, tracking_value)
+        if found:
             session_attr['current_package'] = found
             speak_output = format_package_details(found)
-            return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else about this package?").response
+            return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
+        
+        speak_output = "I couldn't find a package matching that. " + get_package_summary(packages)
+        return handler_input.response_builder.speak(speak_output).ask("Which package would you like details about?").response
 
-        if status == "not_found":
-            speak_output = "I couldn't find a package matching that. You can ask about a specific carrier or tracking number."
-            return handler_input.response_builder.speak(speak_output).ask("Which package would you like details about?").response
+class CompartmentInquiryIntentHandler(AbstractRequestHandler):
+    def can_handle(self, handler_input):
+        return ask_utils.is_intent_name("CompartmentInquiryIntent")(handler_input)
 
-        if len(packages) == 1:
-            session_attr['current_package'] = packages[0]
-            speak_output = format_package_details(packages[0])
-            return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else about this package?").response
+    def handle(self, handler_input):
+        packages = get_packages_for_user(CURRENT_UNIT)
+        if not packages:
+            return handler_input.response_builder.speak("You have no packages.").response
 
-        speak_output = format_all_package_details(packages)
-        return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
+        session_attr = handler_input.attributes_manager.session_attributes
+        tracking_value = get_slot_value(handler_input, 'tracking')
+        
+        # ✅ If no tracking specified, use the most recent package
+        if not tracking_value:
+            found = packages[0] if packages else None
+        else:
+            found = PackageMatcher.match(packages, tracking_value)
+        
+        if found:
+            compartment = found.get('compartment', 'unknown compartment')
+            carrier = found.get('carrier', 'unknown carrier')
+            speak_output = f"The {carrier} package is stored in compartment {compartment}."
+            session_attr['current_package'] = found
+            return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
+        
+        speak_output = "I couldn't find that package. " + get_package_summary(packages)
+        return handler_input.response_builder.speak(speak_output).ask("Which package would you like to know about?").response
+
+class DeliveryInquiryIntentHandler(AbstractRequestHandler):
+    def can_handle(self, handler_input):
+        return ask_utils.is_intent_name("DeliveryInquiryIntent")(handler_input)
+
+    def handle(self, handler_input):
+        packages = get_packages_for_user(CURRENT_UNIT)
+        if not packages:
+            return handler_input.response_builder.speak("You have no packages.").response
+
+        session_attr = handler_input.attributes_manager.session_attributes
+        tracking_value = get_slot_value(handler_input, 'tracking')
+        
+        if not tracking_value:
+            found = packages[0] if packages else None
+        else:
+            found = PackageMatcher.match(packages, tracking_value)
+        
+        if found:
+            delivered_at = found.get('delivered_at')
+            if delivered_at:
+                try:
+                    if isinstance(delivered_at, str):
+                        dt = datetime.strptime(delivered_at, '%Y-%m-%d %H:%M:%S')
+                    else:
+                        dt = delivered_at
+                    # ✅ Convert UTC to local timezone (IST)
+                    delivered_str = dt.strftime('%B %d, %Y at %I:%M %p IST')
+                    waiting_days = calculate_waiting_days(delivered_at)
+                    if waiting_days == 0:
+                        time_str = "today"
+                    elif waiting_days == 1:
+                        time_str = "yesterday"
+                    else:
+                        time_str = f"{waiting_days} days ago"
+                    speak_output = f"The {found.get('carrier', 'unknown carrier')} package was delivered on {delivered_str} ({time_str})."
+                except Exception as e:
+                    logger.error(f"Date parsing error: {e}")
+                    speak_output = f"The package was delivered on {delivered_at}"
+            else:
+                speak_output = "I don't have a delivery date for that package."
+            session_attr['current_package'] = found
+            return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
+        
+        speak_output = "I couldn't find that package. " + get_package_summary(packages)
+        return handler_input.response_builder.speak(speak_output).ask("Which package would you like to know about?").response
 
 class WhichPackageIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
