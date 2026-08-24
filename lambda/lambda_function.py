@@ -135,11 +135,27 @@ alexa_client = AlexaProactiveEventsClient()
 # ============================================
 
 def get_slot_value(handler_input, slot_name: str) -> Optional[str]:
+    """CORRECT way to read a Slot object."""
     try:
-        slots = handler_input.request_envelope.request.intent.slots
-        if not slots or slot_name not in slots:
+        intent = handler_input.request_envelope.request.intent
+        if not intent or not intent.slots:
             return None
-        value = slots[slot_name].value
+        
+        slot = intent.slots.get(slot_name)
+        if not slot:
+            return None
+        
+        # ✅ Try to get value from different possible locations
+        value = slot.value
+        if not value:
+            # Try resolution values
+            if slot.resolutions and slot.resolutions.resolutions_per_authority:
+                for resolution in slot.resolutions.resolutions_per_authority:
+                    if resolution.values and resolution.values[0].value:
+                        value = resolution.values[0].value.name
+                        break
+        
+        logger.info(f"🔍 Slot '{slot_name}' value: {value}")
         return str(value).strip() if value else None
     except Exception as e:
         logger.error(f"get_slot_value error for '{slot_name}': {e}")
@@ -218,27 +234,61 @@ class PackageMatcher:
         try:
             query = query.lower().strip()
             query_clean = ''.join(c for c in query if c.isalnum())
+            logger.info(f"🔍 PackageMatcher - Query: '{query}', Clean: '{query_clean}'")
+            logger.info(f"📦 Available packages: {[p.get('tracking_number') for p in packages]}")
 
-            for p in packages:
-                carrier = p.get('carrier', '').lower().strip()
-                carrier_clean = ''.join(c for c in carrier if c.isalnum())
-                if query == carrier or query_clean == carrier_clean:
-                    return p
             for p in packages:
                 tracking = p.get('tracking_number', '').lower().strip()
                 tracking_clean = ''.join(c for c in tracking if c.isalnum())
-                if query_clean and (query_clean == tracking_clean or query_clean in tracking_clean):
+                
+                # ✅ Check direct match
+                if query == tracking or query_clean == tracking_clean:
+                    logger.info(f"✅ Found by tracking number match: {tracking}")
                     return p
-            for p in packages:
+                
+                # ✅ Check if query is a number and matches tracking
+                if query_clean.isdigit() and query_clean == tracking_clean:
+                    logger.info(f"✅ Found by numeric match: {tracking}")
+                    return p
+                
+                # ✅ Check partial match (for "one eleven" -> "111")
+                if tracking_clean in query_clean or query_clean in tracking_clean:
+                    logger.info(f"✅ Found by partial match: {tracking}")
+                    return p
+                
+                # ✅ Check carrier match
                 carrier = p.get('carrier', '').lower().strip()
                 carrier_clean = ''.join(c for c in carrier if c.isalnum())
-                if query in carrier or carrier in query or query_clean in carrier_clean or carrier_clean in query_clean:
+                if query == carrier or query_clean == carrier_clean:
+                    logger.info(f"✅ Found by carrier match: {carrier}")
                     return p
+            
+            # ✅ Try to convert "one eleven" to "111"
+            if query_clean:
+                # Handle words like "one", "two", "eleven"
+                word_to_number = {
+                    'one': '1', 'two': '2', 'three': '3', 'four': '4',
+                    'five': '5', 'six': '6', 'seven': '7', 'eight': '8',
+                    'nine': '9', 'zero': '0', 'eleven': '11', 'twelve': '12'
+                }
+                
+                # Split query into words and try to convert each
+                words = query_clean.split()
+                numeric_query = ''.join(word_to_number.get(w, w) for w in words)
+                
+                for p in packages:
+                    tracking = p.get('tracking_number', '').lower().strip()
+                    tracking_clean = ''.join(c for c in tracking if c.isalnum())
+                    if numeric_query == tracking_clean:
+                        logger.info(f"✅ Found by word-to-number conversion: {tracking}")
+                        return p
+            
+            logger.info(f"❌ No match found for query: '{query}'")
             return None
         except Exception as e:
             logger.error(f"PackageMatcher error: {e}")
             return None
-
+    
 def resolve_package(handler_input, packages: List[Dict]):
     tracking_value = get_slot_value(handler_input, 'tracking')
     if tracking_value:
@@ -430,7 +480,6 @@ class PackageStatusIntentHandler(AbstractRequestHandler):
             return handler_input.response_builder.speak("You have no packages right now.").response
         speak_output = get_package_summary(packages)
         return handler_input.response_builder.speak(speak_output).ask("Would you like details about any package?").response
-
 class PackageDetailsIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
         return ask_utils.is_intent_name("PackageDetailsIntent")(handler_input)
@@ -443,6 +492,10 @@ class PackageDetailsIntentHandler(AbstractRequestHandler):
         session_attr = handler_input.attributes_manager.session_attributes
         tracking_value = get_slot_value(handler_input, 'tracking')
         
+        # ✅ Log for debugging
+        logger.info(f"🔍 PackageDetailsIntent - tracking_value: '{tracking_value}'")
+        logger.info(f"📦 Packages: {[p.get('tracking_number') for p in packages]}")
+        
         # ✅ If specific tracking number mentioned
         if tracking_value:
             found = PackageMatcher.match(packages, tracking_value)
@@ -451,12 +504,11 @@ class PackageDetailsIntentHandler(AbstractRequestHandler):
                 speak_output = format_full_package_details(found)
                 return handler_input.response_builder.speak(speak_output).response
             else:
-                speak_output = f"I couldn't find a package with tracking number {tracking_value}. " + get_package_summary(packages)
+                speak_output = f"I couldn't find a package matching '{tracking_value}'. " + get_package_summary(packages)
                 return handler_input.response_builder.speak(speak_output).ask("Which package would you like details about?").response
         
         # ✅ No specific tracking - handle single vs multiple
         if len(packages) == 1:
-            # Only one package, give full details
             found = packages[0]
             session_attr['current_package'] = found
             speak_output = format_full_package_details(found)

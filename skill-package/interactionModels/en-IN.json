@@ -65,7 +65,12 @@
             "more about {tracking}",
             "details about {tracking}",
             "info about {tracking}",
-            "give me details for {tracking}"
+            "give me details for {tracking}",
+            "more information about {tracking}",
+            "tell me about {tracking}",
+            "about {tracking}",
+            "package {tracking}",
+            "tracking {tracking}"
           ]
         },
         {
@@ -86,7 +91,9 @@
             "where can I find {tracking}",
             "where is it",
             "location",
-            "compartment"
+            "compartment",
+            "compartment for {tracking}",
+            "where is {tracking}"
           ]
         },
         {
@@ -106,7 +113,8 @@
             "delivery time",
             "when was it delivered",
             "arrival date",
-            "arrival time"
+            "arrival time",
+            "delivery for {tracking}"
           ]
         },
         {
@@ -123,7 +131,8 @@
             "who shipped it",
             "carrier name",
             "delivery company",
-            "who sent it"
+            "who sent it",
+            "carrier for {carrier}"
           ]
         },
         {
@@ -138,7 +147,8 @@
             "what is the tracking number",
             "tracking number",
             "give me tracking info",
-            "tracking details"
+            "tracking details",
+            "tracking number for {tracking}"
           ]
         },
         {
