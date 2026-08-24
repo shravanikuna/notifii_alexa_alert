@@ -18,6 +18,7 @@ DB_CONFIG = {
 
 def get_connection():
     try:
+        print(f"Attempting to connect to DB with config: {DB_CONFIG}")
         return mysql.connector.connect(**DB_CONFIG)
     except Error as e:
         logger.error(f"Database connection error: {e}")
@@ -28,6 +29,7 @@ def get_connection():
 # ============================================
 
 def get_resident_by_alexa_id(alexa_user_id: str):
+    """Get resident by Alexa user ID."""
     try:
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
@@ -44,6 +46,7 @@ def get_resident_by_alexa_id(alexa_user_id: str):
         return None
 
 def get_resident_by_account_id(account_id: str):
+    """Get resident by account_id."""
     try:
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
@@ -60,6 +63,7 @@ def get_resident_by_account_id(account_id: str):
         return None
 
 def get_resident_by_unit(unit: str):
+    """Get resident by unit (legacy - prefer account_id)."""
     try:
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
@@ -75,46 +79,12 @@ def get_resident_by_unit(unit: str):
         logger.error(f"get_resident_by_unit error: {e}")
         return None
 
-def link_account_id_to_alexa(account_id: str, alexa_user_id: str, region: str = "NA") -> bool:
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT * FROM residents WHERE account_id = %s", (account_id,))
-        existing = cursor.fetchone()
-        
-        if existing:
-            cursor.execute(
-                """
-                UPDATE residents 
-                SET alexa_user_id = %s, alexa_region = %s, opted_in = TRUE, linked_at = NOW()
-                WHERE account_id = %s
-                """,
-                (alexa_user_id, region, account_id)
-            )
-        else:
-            cursor.execute(
-                """
-                INSERT INTO residents (account_id, alexa_user_id, alexa_region, opted_in, linked_at)
-                VALUES (%s, %s, %s, TRUE, NOW())
-                """,
-                (account_id, alexa_user_id, region)
-            )
-        
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return True
-    except Error as e:
-        logger.error(f"link_account_id_to_alexa error: {e}")
-        return False
-
 # ============================================
 # PACKAGE FUNCTIONS
 # ============================================
 
 def save_or_update_package(resident_id: int, tracking_number: str, carrier: str,
-                           package_id: str, compartment: str, delivered_at: str):
+                           package_id: str, compartment: str, delivered_at: str, unit: str = None):
     """Insert or update package based on tracking_number (unique)."""
     logger.info(f"📝 save_or_update_package: tracking={tracking_number}")
     
@@ -137,15 +107,14 @@ def save_or_update_package(resident_id: int, tracking_number: str, carrier: str,
                 """
                 UPDATE packages 
                 SET carrier = %s, package_id = %s, compartment = %s, delivered_at = %s,
-                    updated_at = NOW()
+                    unit = %s, updated_at = NOW()
                 WHERE tracking_number = %s AND resident_id = %s
                 """,
-                (carrier, package_id, compartment, delivered_at, tracking_number, resident_id)
+                (carrier, package_id, compartment, delivered_at, unit, tracking_number, resident_id)
             )
             conn.commit()
             update_cursor.close()
             
-            # Fetch updated record
             select_cursor = conn.cursor(dictionary=True)
             select_cursor.execute(
                 "SELECT * FROM packages WHERE tracking_number = %s AND resident_id = %s",
@@ -162,16 +131,15 @@ def save_or_update_package(resident_id: int, tracking_number: str, carrier: str,
         insert_cursor.execute(
             """
             INSERT INTO packages 
-                (resident_id, package_id, tracking_number, carrier, compartment, delivered_at)
-            VALUES (%s, %s, %s, %s, %s, %s)
+                (resident_id, package_id, tracking_number, carrier, compartment, delivered_at, unit)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
-            (resident_id, package_id, tracking_number, carrier, compartment, delivered_at)
+            (resident_id, package_id, tracking_number, carrier, compartment, delivered_at, unit)
         )
         conn.commit()
         new_id = insert_cursor.lastrowid
         insert_cursor.close()
         
-        # Fetch new record
         select_cursor = conn.cursor(dictionary=True)
         select_cursor.execute(
             "SELECT * FROM packages WHERE id = %s",
@@ -188,6 +156,7 @@ def save_or_update_package(resident_id: int, tracking_number: str, carrier: str,
         return None, False
 
 def get_packages_for_resident(resident_id: int):
+    """Get all packages for a resident."""
     try:
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
@@ -234,10 +203,6 @@ def increment_reminder(package_id: int):
         conn.close()
     except Error as e:
         logger.error(f"increment_reminder error: {e}")
-
-# ============================================
-# NOTIFICATION LOG
-# ============================================
 
 def log_notification(package_id: int, status: str, status_reason: str = None):
     try:

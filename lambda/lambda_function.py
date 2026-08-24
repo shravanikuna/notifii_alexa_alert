@@ -216,6 +216,19 @@ def get_user_configuration(unit: str) -> Optional[Dict]:
         logger.error(f"get_user_configuration error: {e}")
         return None
 
+def parse_iso_to_mysql_datetime(iso_string: Optional[str]) -> Optional[str]:
+    """Converts '2026-08-24T08:05:00.000Z' -> '2026-08-24 08:05:00' for MySQL"""
+    if not iso_string:
+        return None
+    try:
+        dt = datetime.fromisoformat(iso_string.replace('Z', '+00:00'))
+        return dt.strftime('%Y-%m-%d %H:%M:%S')
+    except Exception as e:
+        logger.error(f"Failed to parse datetime '{iso_string}': {e}")
+        return None
+
+
+
 # ============================================
 # WEBHOOK HANDLER (UPDATED FOR DATABASE)
 # ============================================
@@ -223,49 +236,61 @@ def get_user_configuration(unit: str) -> Optional[Dict]:
 def handle_package_event(event: Dict, context: Any) -> Dict:
     logger.info(f"📦 Webhook event received: {event}")
     data = event.get('data', {})
+    
+    account_id = data.get('account_id')
     unit = data.get('unit')
     package_id = data.get('package_id')
     carrier = data.get('carrier', 'courier')
     tracking_number = data.get('tracking_number')
     compartment = data.get('compartment')
-    delivered_at = data.get('delivered_at')
+    delivered_at_raw = data.get('delivered_at')
+    
+    # ✅ Convert to MySQL format
+    delivered_at = parse_iso_to_mysql_datetime(delivered_at_raw)
+    
+    logger.info(f"🔍 Parsed: account_id={account_id}, tracking={tracking_number}, delivered_at={delivered_at}")
 
-    if not unit or not package_id:
-        return {"status": "error", "message": "Missing unit or package_id"}
+    if not account_id or not tracking_number:
+        return {"status": "error", "message": "Missing account_id or tracking_number"}
 
-    # ✅ Get user from database
-    user_config = get_user_configuration(unit)
-    if not user_config:
-        return {"status": "error", "message": f"User unit {unit} not found"}
-    if not user_config.get('opted_alexa', False):
-        return {"status": "skipped", "reason": "User not opted in"}
+    # Get resident
+    resident = None
+    if account_id:
+        resident = db.get_resident_by_account_id(account_id)
+    if not resident and unit:
+        resident = db.get_resident_by_unit(unit)
+    if not resident:
+        return {"status": "error", "message": f"No resident found for account_id: {account_id or unit}"}
 
-    alexa_user_id = user_config.get('alexa_user_id')
+    alexa_user_id = resident.get('alexa_user_id')
     if not alexa_user_id:
         return {"status": "skipped", "reason": "No Alexa User ID linked"}
 
-    # ✅ Save package to database (using tracking_number as unique key)
-    resident = db.get_resident_by_unit(unit)
-    if resident:
-        package_row, is_new = db.save_or_update_package(
-            resident_id=resident['id'],
-            tracking_number=tracking_number or package_id,  # fallback to package_id
-            carrier=carrier,
-            package_id=package_id,
-            compartment=compartment,
-            delivered_at=delivered_at
-        )
-        logger.info(f"📦 Package saved to DB: id={package_row['id'] if package_row else 'None'}, is_new={is_new}")
+    # ✅ Save package with converted datetime
+    package_row, is_new = db.save_or_update_package(
+        resident_id=resident['id'],
+        tracking_number=tracking_number,
+        carrier=carrier,
+        package_id=package_id,
+        compartment=compartment,
+        delivered_at=delivered_at,  # ✅ Now in MySQL format
+        unit=unit
+    )
+    
+    if not package_row:
+        return {"status": "error", "message": "Failed to save package"}
 
-    # ✅ Send notification
+    logger.info(f"📦 Package saved: id={package_row.get('id')}, is_new={is_new}")
+
+    # Send notification
     result = alexa_client.send_notification(
         alexa_user_id, carrier, package_id, tracking_number,
-        compartment, delivered_at, unit
+        compartment, delivered_at_raw, unit
     )
+    
     if result.get('status') == 'success':
-        return {"status": "success", "package_id": package_id, "unit": unit, "message": f"Notification sent for {carrier} package"}
+        return {"status": "success", "package_id": package_id, "message": f"Notification sent for {carrier} package"}
     return {"status": "error", "package_id": package_id, "error": result.get('message')}
-
 # ============================================
 # INTENT HANDLERS (UNCHANGED, UPDATED TO USE DB)
 # ============================================
