@@ -1,225 +1,14 @@
 {
   "interactionModel": {
     "languageModel": {
-      "invocationName": "rabbit",
+      "invocationName": "notiffi alert",
       "intents": [
         {
-          "name": "PackageStatusIntent",
-          "samples": [
-            "package status",
-            "what packages do I have",
-            "do I have any packages",
-            "show my packages",
-            "list my packages",
-            "package update",
-            "any packages for me",
-            "do i have any notifications",
-            "any notifications",
-            "check notifications",
-            "what are my packages",
-            "show me my packages",
-            "do i have new packages",
-            "any new packages"
-          ]
-        },
-        {
-          "name": "PackageDetailsIntent",
-          "samples": [
-            "tell me about my package",
-            "package details",
-            "more information about my package",
-            "give me package details",
-            "information about my package",
-            "tell me more",
-            "details",
-            "tell me about the package",
-            "give me more details",
-            "more details",
-            "tell me about the {carrier} package",
-            "details about the {carrier} package",
-            "information about the {carrier} package",
-            "tell me about the {carrier} one",
-            "more about the {carrier} package",
-            "give me details about the {carrier} package",
-            "details for {carrier}",
-            "about {carrier}",
-            "tell me about {carrier}",
-            "give me details about {carrier}",
-            "give me more details {carrier} package",
-            "more details {carrier}",
-            "details of {carrier} package",
-            "give me more details for tracking number {tracking}",
-            "details for tracking {tracking}",
-            "tracking number {tracking}",
-            "the package with tracking number {tracking}"
-          ],
-          "slots": [
-            {
-              "name": "carrier",
-              "type": "AMAZON.SearchQuery"
-            },
-            {
-              "name": "tracking",
-              "type": "AMAZON.SearchQuery"
-            }
-          ]
-        },
-        {
-          "name": "WhichPackageIntent",
-          "samples": [
-            "the {carrier} package",
-            "package from {carrier}",
-            "the {carrier} one",
-            "the one from {carrier}",
-            "{carrier} package",
-            "about the {carrier} one",
-            "give me the {carrier} package",
-            "show me the {carrier} package",
-            "the package from {carrier}"
-          ],
-          "slots": [
-            {
-              "name": "carrier",
-              "type": "AMAZON.SearchQuery"
-            }
-          ]
-        },
-        {
-          "name": "CarrierInquiryIntent",
-          "samples": [
-            "what's the carrier",
-            "who delivered it",
-            "which company",
-            "what carrier",
-            "delivery company",
-            "who shipped it",
-            "which carrier",
-            "who delivered my package",
-            "carrier name",
-            "delivery service",
-            "what is the carrier",
-            "what carrier for tracking {tracking}",
-            "who delivered the package with tracking {tracking}"
-          ],
-          "slots": [
-            {
-              "name": "carrier",
-              "type": "AMAZON.SearchQuery"
-            },
-            {
-              "name": "tracking",
-              "type": "AMAZON.SearchQuery"
-            }
-          ]
-        },
-        {
-          "name": "TrackingInquiryIntent",
-          "samples": [
-            "what's the tracking number",
-            "tracking number",
-            "can I get the tracking number",
-            "tracking info",
-            "do you have a tracking number",
-            "give me the tracking number",
-            "what is the tracking number",
-            "tracking ID",
-            "show me the tracking number",
-            "get tracking",
-            "what is the tracking",
-            "tracking",
-            "what's the tracking number for the {carrier} package",
-            "tracking number for {carrier}"
-          ],
-          "slots": [
-            {
-              "name": "carrier",
-              "type": "AMAZON.SearchQuery"
-            },
-            {
-              "name": "tracking",
-              "type": "AMAZON.SearchQuery"
-            }
-          ]
-        },
-        {
-          "name": "CompartmentInquiryIntent",
-          "samples": [
-            "which compartment",
-            "what compartment",
-            "where is it stored",
-            "compartment number",
-            "where is my package",
-            "package location",
-            "which locker",
-            "where can I find it",
-            "compartment location",
-            "where is the package",
-            "what is the compartment",
-            "in which compartment the {carrier} package is stored",
-            "in which compartment the package with tracking number {tracking} is stored",
-            "which compartment for {carrier}",
-            "compartment for tracking {tracking}"
-          ],
-          "slots": [
-            {
-              "name": "carrier",
-              "type": "AMAZON.SearchQuery"
-            },
-            {
-              "name": "tracking",
-              "type": "AMAZON.SearchQuery"
-            }
-          ]
-        },
-        {
-          "name": "DeliveryInquiryIntent",
-          "samples": [
-            "when was it delivered",
-            "delivery date",
-            "what time was it delivered",
-            "delivery time",
-            "when did it arrive",
-            "delivered when",
-            "delivery day",
-            "arrival time",
-            "arrival date",
-            "when was the {carrier} package delivered",
-            "delivery date for tracking {tracking}"
-          ],
-          "slots": [
-            {
-              "name": "carrier",
-              "type": "AMAZON.SearchQuery"
-            },
-            {
-              "name": "tracking",
-              "type": "AMAZON.SearchQuery"
-            }
-          ]
-        },
-        {
-          "name": "ExitIntent",
-          "samples": [
-            "that's all",
-            "goodbye",
-            "bye",
-            "see you later",
-            "exit",
-            "quit",
-            "done",
-            "that's it",
-            "no thanks",
-            "not now",
-            "all done",
-            "good night"
-          ]
-        },
-        {
-          "name": "AMAZON.HelpIntent",
+          "name": "AMAZON.CancelIntent",
           "samples": []
         },
         {
-          "name": "AMAZON.CancelIntent",
+          "name": "AMAZON.HelpIntent",
           "samples": []
         },
         {
@@ -227,16 +16,37 @@
           "samples": []
         },
         {
+          "name": "AMAZON.NavigateHomeIntent",
+          "samples": []
+        },
+        {
           "name": "AMAZON.FallbackIntent",
           "samples": []
         },
         {
-          "name": "AMAZON.YesIntent",
-          "samples": []
+          "name": "PackageStatusIntent",
+          "slots": [],
+          "samples": [
+            "ask Notifii Alert for my packages",
+            "ask Notifii Alert to check mailroom",
+            "what does Notifii Alert have for me",
+            "get my Notifii Alert packages",
+            "check Notifii Alert mailroom",
+            "show Notifii Alert packages",
+            "mailroom packages from Notifii Alert",
+            "ask Notifii Alert what is waiting"
+          ]
         },
         {
-          "name": "AMAZON.NoIntent",
-          "samples": []
+          "name": "CompartmentInquiryIntent",
+          "slots": [],
+          "samples": [
+            "where is my package",
+            "what compartment",
+            "which locker",
+            "package location",
+            "compartment number"
+          ]
         }
       ],
       "types": []
