@@ -24,6 +24,10 @@
           "samples": []
         },
         {
+          "name": "LaunchRequest",
+          "samples": []
+        },
+        {
           "name": "PackageStatusIntent",
           "slots": [],
           "samples": [
@@ -33,7 +37,8 @@
             "check my packages",
             "package status",
             "any deliveries",
-            "show me my packages"
+            "show me my packages",
+            "list my packages"
           ]
         },
         {
@@ -45,12 +50,19 @@
             }
           ],
           "samples": [
-            "more information about {tracking}",
+            "more information",
+            "give me more information",
+            "tell me more",
+            "more details",
+            "give me details",
+            "details please",
+            "more info",
+            "tell me everything",
+            "full details",
+            "more about my package",
             "tell me more about {tracking}",
             "details about {tracking}",
-            "give me details for {tracking}",
-            "info about {tracking}",
-            "more details"
+            "info about {tracking}"
           ]
         },
         {
@@ -68,7 +80,9 @@
             "what locker",
             "where is my package",
             "package location",
-            "where can I find {tracking}"
+            "where can I find {tracking}",
+            "where is it",
+            "location"
           ]
         },
         {
@@ -85,7 +99,10 @@
             "delivery date",
             "when did {tracking} arrive",
             "what time was it delivered",
-            "delivery time"
+            "delivery time",
+            "when was it delivered",
+            "arrival date",
+            "arrival time"
           ]
         },
         {
@@ -99,9 +116,10 @@
           "samples": [
             "who delivered it",
             "what carrier",
-            "who shipped {carrier}",
+            "who shipped it",
             "carrier name",
-            "delivery company"
+            "delivery company",
+            "who sent it"
           ]
         },
         {
@@ -114,8 +132,9 @@
           ],
           "samples": [
             "what is the tracking number",
-            "tracking number for {tracking}",
-            "give me tracking info"
+            "tracking number",
+            "give me tracking info",
+            "tracking details"
           ]
         },
         {
@@ -129,7 +148,8 @@
           "samples": [
             "which package",
             "the {tracking} package",
-            "what about {tracking}"
+            "what about {tracking}",
+            "that package"
           ]
         },
         {
@@ -139,7 +159,8 @@
             "quit",
             "bye",
             "goodbye",
-            "close"
+            "close",
+            "stop"
           ]
         }
       ],

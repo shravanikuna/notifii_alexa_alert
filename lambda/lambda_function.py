@@ -384,7 +384,41 @@ class LaunchRequestHandler(AbstractRequestHandler):
         session_attr.pop('current_package', None)
 
         packages = get_packages_for_user(CURRENT_UNIT)
-        speak_output = get_package_summary(packages) if packages else "Welcome to Notifii Alert. You have no packages at the moment."
+        
+        if packages:
+            # ✅ Welcome message with package details
+            welcome = "Welcome to Notifii Alert."
+            
+            # Build package list with details
+            package_list = []
+            for p in packages:
+                carrier = p.get('carrier', 'unknown carrier')
+                tracking = p.get('tracking_number', 'unknown')
+                delivered_at = p.get('delivered_at')
+                
+                if delivered_at:
+                    try:
+                        if isinstance(delivered_at, str):
+                            dt = datetime.strptime(delivered_at, '%Y-%m-%d %H:%M:%S')
+                        else:
+                            dt = delivered_at
+                        date_str = dt.strftime('%B %d, %Y')
+                        time_str = dt.strftime('%I:%M %p')
+                        package_list.append(f"from {carrier} with tracking {tracking} delivered on {date_str} at {time_str}")
+                    except Exception:
+                        package_list.append(f"from {carrier} with tracking {tracking}")
+                else:
+                    package_list.append(f"from {carrier} with tracking {tracking}")
+            
+            if len(package_list) == 1:
+                speak_output = f"{welcome} You have a package {package_list[0]}. You can ask for more details."
+            elif len(package_list) == 2:
+                speak_output = f"{welcome} You have packages {package_list[0]} and {package_list[1]}. You can ask for more details."
+            else:
+                speak_output = f"{welcome} You have packages {', '.join(package_list[:-1])}, and {package_list[-1]}. You can ask for more details."
+        else:
+            speak_output = "Welcome to Notifii Alert. You have no packages at the moment."
+        
         return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
 
 class PackageStatusIntentHandler(AbstractRequestHandler):
@@ -410,27 +444,82 @@ class PackageDetailsIntentHandler(AbstractRequestHandler):
         session_attr = handler_input.attributes_manager.session_attributes
         tracking_value = get_slot_value(handler_input, 'tracking')
         
-        # ✅ If user said "more information" without specific tracking
+        # ✅ If no tracking specified, use the most recent package or ask
         if not tracking_value:
-            # If only one package, give its details
+            # If only one package, give full details
             if len(packages) == 1:
-                session_attr['current_package'] = packages[0]
-                speak_output = format_package_details(packages[0])
+                found = packages[0]
+                session_attr['current_package'] = found
+                speak_output = format_full_package_details(found)
                 return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
             
-            # Multiple packages - ask which one
-            speak_output = "Which package would you like more information about? " + get_package_summary(packages)
+            # Multiple packages - give summary and ask which one
+            speak_output = get_package_summary(packages) + " Which package would you like more details about?"
             return handler_input.response_builder.speak(speak_output).ask("Please specify the tracking number or carrier.").response
         
-        # ✅ Find the specific package
+        # ✅ Find specific package
         found = PackageMatcher.match(packages, tracking_value)
         if found:
             session_attr['current_package'] = found
-            speak_output = format_package_details(found)
+            speak_output = format_full_package_details(found)
             return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
         
         speak_output = "I couldn't find a package matching that. " + get_package_summary(packages)
         return handler_input.response_builder.speak(speak_output).ask("Which package would you like details about?").response
+
+
+def format_full_package_details(package: Dict) -> str:
+    """Return complete package details including all fields."""
+    carrier = package.get('carrier', 'unknown carrier')
+    tracking = package.get('tracking_number', 'no tracking number')
+    package_id = package.get('package_id', 'unknown')
+    compartment = package.get('compartment', 'unknown compartment')
+    delivered_at = package.get('delivered_at')
+    description = package.get('description', '')
+    
+    parts = []
+    
+    # ✅ Package ID
+    parts.append(f"Package ID is {package_id}")
+    
+    # ✅ Carrier
+    parts.append(f"delivered by {carrier}")
+    
+    # ✅ Tracking Number
+    parts.append(f"with tracking number {tracking}")
+    
+    # ✅ Compartment
+    parts.append(f"stored in compartment {compartment}")
+    
+    # ✅ Delivery date and time
+    if delivered_at:
+        try:
+            if isinstance(delivered_at, str):
+                dt = datetime.strptime(delivered_at, '%Y-%m-%d %H:%M:%S')
+            else:
+                dt = delivered_at
+            
+            # Format date and time
+            date_str = dt.strftime('%B %d, %Y')
+            time_str = dt.strftime('%I:%M %p')
+            
+            waiting_days = calculate_waiting_days(delivered_at)
+            if waiting_days == 0:
+                day_str = "today"
+            elif waiting_days == 1:
+                day_str = "yesterday"
+            else:
+                day_str = f"{waiting_days} days ago"
+            
+            parts.append(f"delivered on {date_str} at {time_str} ({day_str})")
+        except Exception:
+            parts.append(f"delivered on {delivered_at}")
+    
+    # ✅ Description if available
+    if description:
+        parts.append(f"Note: {description}")
+    
+    return "Your package: " + ", ".join(parts) + "."
 
 class CompartmentInquiryIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
