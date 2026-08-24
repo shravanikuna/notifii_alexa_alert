@@ -11,7 +11,7 @@ from ask_sdk_core.skill_builder import SkillBuilder
 from ask_sdk_core.dispatch_components import AbstractRequestHandler, AbstractExceptionHandler
 from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_model import Response
-import db  # ✅ Database module
+import db
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -27,10 +27,39 @@ class Config:
 
 config = Config()
 
-# ✅ Global variable for current user (set in LaunchRequest)
 CURRENT_USER_ID = None
-CURRENT_UNIT = "4B"  # Default unit
+CURRENT_UNIT = "4B"
 USER_ID_TO_UNIT = {config.LATEST_ALEXA_USER_ID: "4B"}
+
+# ============================================
+# DATETIME HELPER
+# ============================================
+
+def parse_iso_to_mysql_datetime(iso_string: Optional[str]) -> Optional[str]:
+    """Converts '2026-08-24T08:05:00.000Z' -> '2026-08-24 08:05:00' for MySQL"""
+    if not iso_string:
+        return None
+    try:
+        dt = datetime.fromisoformat(iso_string.replace('Z', '+00:00'))
+        return dt.strftime('%Y-%m-%d %H:%M:%S')
+    except Exception as e:
+        logger.error(f"Failed to parse datetime '{iso_string}': {e}")
+        return None
+
+def calculate_waiting_days(delivered_at: Optional[str]) -> int:
+    if not delivered_at:
+        return 0
+    try:
+        if isinstance(delivered_at, str):
+            dt = datetime.strptime(delivered_at, '%Y-%m-%d %H:%M:%S')
+        else:
+            dt = delivered_at
+        now = datetime.now()
+        days = (now - dt).days
+        return days if days > 0 else 0
+    except Exception as e:
+        logger.error(f"calculate_waiting_days error: {e}")
+        return 0
 
 # ============================================
 # ALEXA PROACTIVE EVENTS CLIENT
@@ -69,8 +98,10 @@ class AlexaProactiveEventsClient:
         token = self.get_token()
         if not token:
             return {"status": "error", "message": "Failed to obtain LWA access token"}
+        
         now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         expiry = (datetime.utcnow() + timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        
         payload = {
             "timestamp": now,
             "referenceId": f"notifii.{package_id}.{int(datetime.utcnow().timestamp())}",
@@ -85,22 +116,22 @@ class AlexaProactiveEventsClient:
             "relevantAudience": {"type": "Unicast", "payload": {"user": alexa_user_id}}
         }
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-        logger.info(f"📤 OUTGOING PAYLOAD")
+        logger.info(f"📤 Sending notification for {tracking_number}")
         try:
             response = requests.post(self.api_url, json=payload, headers=headers, timeout=10)
             if response.status_code == 202:
-                logger.info(f"✅ Notification successfully sent to {alexa_user_id}")
+                logger.info(f"✅ Notification sent successfully")
                 return {"status": "success", "code": 202}
-            logger.error(f"❌ Proactive Events API error: {response.status_code} - {response.text}")
+            logger.error(f"❌ API error: {response.status_code}")
             return {"status": "error", "code": response.status_code, "message": response.text}
         except Exception as e:
-            logger.error(f"❌ Send notification error: {str(e)}")
+            logger.error(f"❌ Send error: {str(e)}")
             return {"status": "error", "message": str(e)}
 
 alexa_client = AlexaProactiveEventsClient()
 
 # ============================================
-# HELPERS (UNCHANGED FROM YOUR WORKING CODE)
+# HELPERS
 # ============================================
 
 def get_slot_value(handler_input, slot_name: str) -> Optional[str]:
@@ -119,18 +150,28 @@ def format_package_details(package: Dict) -> str:
     tracking = package.get('tracking_number', 'no tracking number')
     compartment = package.get('compartment', 'unknown compartment')
     delivered_at = package.get('delivered_at')
+    
     if delivered_at:
         try:
             if isinstance(delivered_at, str):
-                dt = datetime.fromisoformat(delivered_at.replace('Z', '+00:00'))
+                dt = datetime.strptime(delivered_at, '%Y-%m-%d %H:%M:%S')
             else:
                 dt = delivered_at
             delivered_str = dt.strftime('%B %d, %Y at %I:%M %p')
         except Exception:
-            delivered_str = delivered_at
+            delivered_str = str(delivered_at)
     else:
         delivered_str = 'recently'
-    return f"Package from {carrier}, tracking number {tracking}, stored in compartment {compartment}, delivered on {delivered_str}"
+    
+    waiting_days = calculate_waiting_days(delivered_at)
+    if waiting_days == 0:
+        waiting_str = "arrived today"
+    elif waiting_days == 1:
+        waiting_str = "arrived 1 day ago"
+    else:
+        waiting_str = f"arrived {waiting_days} days ago"
+    
+    return f"Package from {carrier}, tracking number {tracking}, stored in compartment {compartment}, delivered on {delivered_str}, {waiting_str}"
 
 def format_all_package_details(packages: List[Dict]) -> str:
     return " Also, ".join(format_package_details(p) for p in packages)
@@ -138,16 +179,27 @@ def format_all_package_details(packages: List[Dict]) -> str:
 def get_package_summary(packages: List[Dict]) -> str:
     if not packages:
         return "You have no packages right now."
-    descriptions = [f"from {p.get('carrier', 'unknown')} with tracking number {p.get('tracking_number', 'unknown')}" for p in packages]
+    
+    descriptions = []
+    for p in packages:
+        carrier = p.get('carrier', 'unknown')
+        tracking = p.get('tracking_number', 'unknown')
+        waiting_days = calculate_waiting_days(p.get('delivered_at'))
+        if waiting_days == 0:
+            waiting_str = "arrived today"
+        elif waiting_days == 1:
+            waiting_str = "arrived 1 day ago"
+        else:
+            waiting_str = f"arrived {waiting_days} days ago"
+        descriptions.append(f"from {carrier} with tracking {tracking} ({waiting_str})")
+    
     if len(descriptions) == 1:
         return f"You have a package {descriptions[0]}. If you want to know more about this package, just ask me."
     elif len(descriptions) == 2:
-        return f"You have {descriptions[0]} and {descriptions[1]}. If you want to know more about any package, just ask me."
-    return f"You have {', '.join(descriptions[:-1])}, and {descriptions[-1]}. If you want to know more about any package, just ask me."
+        return f"You have packages {descriptions[0]} and {descriptions[1]}. If you want to know more about any package, just ask me."
+    return f"You have packages {', '.join(descriptions[:-1])}, and {descriptions[-1]}. If you want to know more about any package, just ask me."
 
-# ✅ Database-based package retrieval
 def get_packages_for_user(unit: str) -> List[Dict]:
-    """Get packages from database for a unit."""
     try:
         resident = db.get_resident_by_unit(unit)
         if not resident:
@@ -165,7 +217,6 @@ class PackageMatcher:
         try:
             query = query.lower().strip()
             query_clean = ''.join(c for c in query if c.isalnum())
-            logger.info(f"PackageMatcher - Query: '{query}', Clean: '{query_clean}'")
 
             for p in packages:
                 carrier = p.get('carrier', '').lower().strip()
@@ -200,9 +251,7 @@ def resolve_package(handler_input, packages: List[Dict]):
 
     return ("no_selector", None)
 
-# ✅ Helper to get user configuration from database
 def get_user_configuration(unit: str) -> Optional[Dict]:
-    """Get user configuration from database."""
     try:
         resident = db.get_resident_by_unit(unit)
         if resident:
@@ -216,25 +265,12 @@ def get_user_configuration(unit: str) -> Optional[Dict]:
         logger.error(f"get_user_configuration error: {e}")
         return None
 
-def parse_iso_to_mysql_datetime(iso_string: Optional[str]) -> Optional[str]:
-    """Converts '2026-08-24T08:05:00.000Z' -> '2026-08-24 08:05:00' for MySQL"""
-    if not iso_string:
-        return None
-    try:
-        dt = datetime.fromisoformat(iso_string.replace('Z', '+00:00'))
-        return dt.strftime('%Y-%m-%d %H:%M:%S')
-    except Exception as e:
-        logger.error(f"Failed to parse datetime '{iso_string}': {e}")
-        return None
-
-
-
 # ============================================
-# WEBHOOK HANDLER (UPDATED FOR DATABASE)
+# WEBHOOK HANDLER
 # ============================================
 
 def handle_package_event(event: Dict, context: Any) -> Dict:
-    logger.info(f"📦 Webhook event received: {event}")
+    logger.info(f"📦 Webhook event received")
     data = event.get('data', {})
     
     account_id = data.get('account_id')
@@ -244,8 +280,9 @@ def handle_package_event(event: Dict, context: Any) -> Dict:
     tracking_number = data.get('tracking_number')
     compartment = data.get('compartment')
     delivered_at_raw = data.get('delivered_at')
+    description = data.get('description')
     
-    # ✅ Convert to MySQL format
+    # ✅ Convert datetime to MySQL format
     delivered_at = parse_iso_to_mysql_datetime(delivered_at_raw)
     
     logger.info(f"🔍 Parsed: account_id={account_id}, tracking={tracking_number}, delivered_at={delivered_at}")
@@ -260,21 +297,22 @@ def handle_package_event(event: Dict, context: Any) -> Dict:
     if not resident and unit:
         resident = db.get_resident_by_unit(unit)
     if not resident:
-        return {"status": "error", "message": f"No resident found for account_id: {account_id or unit}"}
+        return {"status": "error", "message": f"No resident found"}
 
     alexa_user_id = resident.get('alexa_user_id')
     if not alexa_user_id:
         return {"status": "skipped", "reason": "No Alexa User ID linked"}
 
-    # ✅ Save package with converted datetime
+    # ✅ Save/Update package
     package_row, is_new = db.save_or_update_package(
         resident_id=resident['id'],
         tracking_number=tracking_number,
         carrier=carrier,
         package_id=package_id,
         compartment=compartment,
-        delivered_at=delivered_at,  # ✅ Now in MySQL format
-        unit=unit
+        delivered_at=delivered_at,
+        unit=unit,
+        description=description
     )
     
     if not package_row:
@@ -282,26 +320,47 @@ def handle_package_event(event: Dict, context: Any) -> Dict:
 
     logger.info(f"📦 Package saved: id={package_row.get('id')}, is_new={is_new}")
 
-    # Send notification
-    result = alexa_client.send_notification(
-        alexa_user_id, carrier, package_id, tracking_number,
-        compartment, delivered_at_raw, unit
-    )
-    
-    if result.get('status') == 'success':
-        return {"status": "success", "package_id": package_id, "message": f"Notification sent for {carrier} package"}
-    return {"status": "error", "package_id": package_id, "error": result.get('message')}
-# ============================================
-# INTENT HANDLERS (UNCHANGED, UPDATED TO USE DB)
-# ============================================
+    # ✅ Send notification if new or reminder
+    should_notify = is_new
+    if not should_notify:
+        waiting_days = calculate_waiting_days(delivered_at)
+        reminder_days = [3, 5, 7, 10, 14, 21, 30]
+        if waiting_days in reminder_days:
+            # Check if already notified today
+            last_notified = package_row.get('last_notified_at')
+            if not last_notified:
+                should_notify = True
+            else:
+                try:
+                    if isinstance(last_notified, str):
+                        last_dt = datetime.strptime(last_notified, '%Y-%m-%d %H:%M:%S')
+                    else:
+                        last_dt = last_notified
+                    if last_dt.date() != datetime.now().date():
+                        should_notify = True
+                except Exception:
+                    should_notify = True
 
-class ProactiveSubscriptionChangedHandler(AbstractRequestHandler):
-    def can_handle(self, handler_input):
-        return ask_utils.is_request_type("AlexaSkillEvent.ProactiveSubscriptionChanged")(handler_input)
-    def handle(self, handler_input):
-        user_id = handler_input.request_envelope.context.system.user.user_id
-        logger.info(f"✅ SUBSCRIPTION EVENT RECEIVED for user: {user_id}")
-        return handler_input.response_builder.response
+    if should_notify:
+        result = alexa_client.send_notification(
+            alexa_user_id, carrier, package_id, tracking_number,
+            compartment, delivered_at_raw, unit
+        )
+        if result.get('status') == 'success':
+            db.mark_package_notified(package_row['id'])
+            db.log_notification(package_row['id'], "sent", "Success")
+            return {"status": "success", "package_id": package_id, "message": "Notification sent"}
+        else:
+            # ✅ Log failure
+            db.log_notification(package_row['id'], "failed", result.get('message'))
+            return {"status": "error", "package_id": package_id, "error": result.get('message')}
+
+    logger.info(f"ℹ️ Package {tracking_number} already notified today, skipping")
+    return {"status": "no_action", "reason": "already_notified_today"}
+
+# ============================================
+# INTENT HANDLERS
+# ============================================
 
 class LaunchRequestHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
@@ -311,12 +370,10 @@ class LaunchRequestHandler(AbstractRequestHandler):
         global CURRENT_USER_ID, CURRENT_UNIT
         CURRENT_USER_ID = handler_input.request_envelope.context.system.user.user_id
         
-        # ✅ Check if user exists in database
         resident = db.get_resident_by_alexa_id(CURRENT_USER_ID)
         if resident:
             CURRENT_UNIT = resident.get('unit', "4B")
         else:
-            # Fallback to env mapping
             CURRENT_UNIT = USER_ID_TO_UNIT.get(CURRENT_USER_ID, "4B")
         
         logger.info(f"🚀 User {CURRENT_USER_ID[:20]}... mapped to unit {CURRENT_UNIT}")
@@ -324,9 +381,8 @@ class LaunchRequestHandler(AbstractRequestHandler):
         session_attr = handler_input.attributes_manager.session_attributes
         session_attr.pop('current_package', None)
 
-        # ✅ Get packages from database
         packages = get_packages_for_user(CURRENT_UNIT)
-        speak_output = get_package_summary(packages) if packages else "Welcome to Notifii Alert. Your account is connected for package updates. You have no packages at the moment."
+        speak_output = get_package_summary(packages) if packages else "Welcome to Notifii Alert. You have no packages at the moment."
         return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
 
 class PackageStatusIntentHandler(AbstractRequestHandler):
@@ -478,12 +534,12 @@ class DeliveryInquiryIntentHandler(AbstractRequestHandler):
         if delivered_at:
             try:
                 if isinstance(delivered_at, str):
-                    dt = datetime.fromisoformat(delivered_at.replace('Z', '+00:00'))
+                    dt = datetime.strptime(delivered_at, '%Y-%m-%d %H:%M:%S')
                 else:
                     dt = delivered_at
                 delivered_str = dt.strftime('%B %d, %Y at %I:%M %p')
             except Exception:
-                delivered_str = delivered_at
+                delivered_str = str(delivered_at)
         else:
             delivered_str = 'recently'
         speak_output = f"The {found.get('carrier', 'unknown carrier')} package was delivered on {delivered_str}."
@@ -557,7 +613,6 @@ sb = SkillBuilder()
 sb.add_request_handler(SkillPermissionChangedHandler())
 sb.add_request_handler(SkillDisabledHandler())
 sb.add_request_handler(SessionEndedRequestHandler())
-sb.add_request_handler(ProactiveSubscriptionChangedHandler())
 sb.add_request_handler(LaunchRequestHandler())
 sb.add_request_handler(PackageStatusIntentHandler())
 sb.add_request_handler(PackageDetailsIntentHandler())
