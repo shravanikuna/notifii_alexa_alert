@@ -1,7 +1,7 @@
 {
   "interactionModel": {
     "languageModel": {
-      "invocationName": "notiffi alert",
+      "invocationName": "rabbit",
       "intents": [
         {
           "name": "AMAZON.CancelIntent",
