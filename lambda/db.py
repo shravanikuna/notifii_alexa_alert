@@ -5,7 +5,6 @@ import logging
 from dotenv import load_dotenv
 
 load_dotenv()
-
 logger = logging.getLogger(__name__)
 
 DB_CONFIG = {
@@ -44,11 +43,14 @@ def get_resident_by_alexa_id(alexa_user_id: str):
         return None
 
 def get_resident_by_account_id(account_id: str):
+    """Note: no opted_in filter here — that check now happens explicitly in
+    handle_package_event so 'not opted in' can be reported cleanly instead
+    of showing up as 'resident not found'."""
     try:
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
-            "SELECT * FROM residents WHERE account_id = %s AND opted_in = TRUE",
+            "SELECT * FROM residents WHERE account_id = %s",
             (account_id,)
         )
         result = cursor.fetchone()
@@ -79,14 +81,14 @@ def link_account_id_to_alexa(account_id: str, alexa_user_id: str, region: str = 
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute("SELECT * FROM residents WHERE account_id = %s", (account_id,))
         existing = cursor.fetchone()
-        
+
         if existing:
             cursor.execute(
                 """
-                UPDATE residents 
+                UPDATE residents
                 SET alexa_user_id = %s, alexa_region = %s, opted_in = TRUE, linked_at = NOW()
                 WHERE account_id = %s
                 """,
@@ -100,7 +102,7 @@ def link_account_id_to_alexa(account_id: str, alexa_user_id: str, region: str = 
                 """,
                 (account_id, alexa_user_id, region)
             )
-        
+
         conn.commit()
         cursor.close()
         conn.close()
@@ -116,12 +118,11 @@ def link_account_id_to_alexa(account_id: str, alexa_user_id: str, region: str = 
 def save_or_update_package(resident_id: int, tracking_number: str, carrier: str,
                            package_id: str, compartment: str, delivered_at: str,
                            unit: str = None, description: str = None):
-    """Insert or update package based on tracking_number."""
     logger.info(f"📝 save_or_update_package: tracking={tracking_number}")
-    
+
     try:
         conn = get_connection()
-        
+
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
             "SELECT * FROM packages WHERE tracking_number = %s AND resident_id = %s",
@@ -129,12 +130,12 @@ def save_or_update_package(resident_id: int, tracking_number: str, carrier: str,
         )
         existing = cursor.fetchone()
         cursor.close()
-        
+
         if existing:
             update_cursor = conn.cursor()
             update_cursor.execute(
                 """
-                UPDATE packages 
+                UPDATE packages
                 SET carrier = %s, package_id = %s, compartment = %s, delivered_at = %s,
                     unit = %s, description = %s, updated_at = NOW()
                 WHERE tracking_number = %s AND resident_id = %s
@@ -144,7 +145,7 @@ def save_or_update_package(resident_id: int, tracking_number: str, carrier: str,
             )
             conn.commit()
             update_cursor.close()
-            
+
             select_cursor = conn.cursor(dictionary=True)
             select_cursor.execute(
                 "SELECT * FROM packages WHERE tracking_number = %s AND resident_id = %s",
@@ -155,12 +156,12 @@ def save_or_update_package(resident_id: int, tracking_number: str, carrier: str,
             conn.close()
             logger.info(f"✅ Package updated: {updated['id']}")
             return updated, False
-        
+
         insert_cursor = conn.cursor()
         insert_cursor.execute(
             """
-            INSERT INTO packages 
-                (resident_id, package_id, tracking_number, carrier, compartment, 
+            INSERT INTO packages
+                (resident_id, package_id, tracking_number, carrier, compartment,
                  delivered_at, unit, description)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """,
@@ -170,7 +171,7 @@ def save_or_update_package(resident_id: int, tracking_number: str, carrier: str,
         conn.commit()
         new_id = insert_cursor.lastrowid
         insert_cursor.close()
-        
+
         select_cursor = conn.cursor(dictionary=True)
         select_cursor.execute(
             "SELECT * FROM packages WHERE id = %s",
@@ -181,7 +182,7 @@ def save_or_update_package(resident_id: int, tracking_number: str, carrier: str,
         conn.close()
         logger.info(f"✅ New package inserted: {new_row['id']}")
         return new_row, True
-        
+
     except Error as e:
         logger.error(f"❌ save_or_update_package error: {e}")
         return None, False
@@ -192,8 +193,8 @@ def get_packages_for_resident(resident_id: int):
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
             """
-            SELECT * FROM packages 
-            WHERE resident_id = %s 
+            SELECT * FROM packages
+            WHERE resident_id = %s
             ORDER BY delivered_at DESC
             """,
             (resident_id,)
@@ -239,7 +240,8 @@ def increment_reminder(package_id: int):
 # ============================================
 
 def log_notification(package_id: int, status: str, status_reason: str = None):
-    """Log notification attempt with status (sent/failed)."""
+    """Logs every attempt — 'sent', 'failed', or 'skipped' — so you can always
+    audit whether a notification actually reached Amazon's API or not."""
     try:
         conn = get_connection()
         cursor = conn.cursor()
