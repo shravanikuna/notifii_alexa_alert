@@ -69,12 +69,12 @@ class AlexaProactiveEventsClient:
                 self._cached_token = data["access_token"]
                 expires_in = data.get("expires_in", 3600)
                 self._token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in - 300)
-                logger.info(f"✅ Successfully obtained LWA token")
+                logger.info(f" Successfully obtained LWA token")
                 return self._cached_token
-            logger.error(f"❌ Token failed: {response.status_code}")
+            logger.error(f" Token failed: {response.status_code}")
             return None
         except Exception as e:
-            logger.error(f"❌ Token fetch error: {str(e)}")
+            logger.error(f" Token fetch error: {str(e)}")
             return None
 
     def send_notification(self, alexa_user_id, carrier, package_id, tracking_number=None,
@@ -100,16 +100,16 @@ class AlexaProactiveEventsClient:
             "relevantAudience": {"type": "Unicast", "payload": {"user": alexa_user_id}}
         }
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-        logger.info(f"📤 Sending notification for {tracking_number}")
+        logger.info(f" Sending notification for {tracking_number}")
         try:
             response = requests.post(self.api_url, json=payload, headers=headers, timeout=10)
             if response.status_code == 202:
-                logger.info(f"✅ Notification sent successfully")
+                logger.info(f" Notification sent successfully")
                 return {"status": "success", "code": 202}
-            logger.error(f"❌ API error: {response.status_code}")
+            logger.error(f" API error: {response.status_code}")
             return {"status": "error", "code": response.status_code, "message": response.text}
         except Exception as e:
-            logger.error(f"❌ Send error: {str(e)}")
+            logger.error(f" Send error: {str(e)}")
             return {"status": "error", "message": str(e)}
 
 alexa_client = AlexaProactiveEventsClient()
@@ -202,55 +202,63 @@ def get_packages_for_resident_safe(resident: Optional[Dict]) -> List[Dict]:
         return []
     return db.get_packages_for_resident(resident['id'])
 
-def get_status_report_packages(resident: Optional[Dict]) -> List[Dict]:
+
+def get_status_report_packages(handler_input, resident: Optional[Dict]) -> List[Dict]:
     """
-    Returns packages that should be announced to the user:
-    - Unheard packages (never heard by user)
-    - OR packages that have been heard but have new notifications (reminders)
+    Returns packages that should be announced to the user.
+    Tracks which packages were announced in the current session.
     """
     if not resident:
         return []
     
     resident_id = resident['id']
-    
-    # Get ALL packages for this resident
     all_packages = db.get_packages_for_resident(resident_id)
     
-    # Filter: Only packages that are either:
-    # 1. Not heard yet (heard_at IS NULL)
-    # 2. Have been notified recently (last_notified_at > heard_at)
+    # Get the session ID or create one
+    session_attr = handler_input.attributes_manager.session_attributes
+    session_id = session_attr.get('session_id', str(uuid.uuid4()))
+    session_attr['session_id'] = session_id
+    
+    # Get packages announced in this session
+    announced_in_session = session_attr.get('announced_packages', [])
+    
     unheard_or_new = []
     
     for p in all_packages:
         heard_at = p.get('heard_at')
         last_notified_at = p.get('last_notified_at')
+        package_id = p['id']
         
         # If never heard, include it
         if heard_at is None:
             unheard_or_new.append(p)
             continue
         
-        # If heard but there's a new notification (reminder) after the last hear time
+        # If heard but there's a new notification after the last hear time
         if last_notified_at and heard_at:
             try:
                 last_notified_dt = datetime.strptime(last_notified_at, '%Y-%m-%d %H:%M:%S') if isinstance(last_notified_at, str) else last_notified_at
                 heard_dt = datetime.strptime(heard_at, '%Y-%m-%d %H:%M:%S') if isinstance(heard_at, str) else heard_at
-                
-                # If there's a new notification after the user heard it, include it
                 if last_notified_dt > heard_dt:
                     unheard_or_new.append(p)
+                    # Reset heard_at so it's announced again
+                    db.reset_heard_at(package_id)
             except Exception:
-                # If we can't parse dates, include it to be safe
                 unheard_or_new.append(p)
     
-    # Mark all returned packages as heard (user is about to hear them)
+    # Mark all returned packages as heard
     if unheard_or_new:
         db.mark_packages_heard([p['id'] for p in unheard_or_new])
+        # Store announced packages in session
+        announced_packages = session_attr.get('announced_packages', [])
+        for p in unheard_or_new:
+            if p['id'] not in announced_packages:
+                announced_packages.append(p['id'])
+        session_attr['announced_packages'] = announced_packages
     
     db.update_last_session(resident_id)
     
     return unheard_or_new
-
 class PackageMatcher:
     @staticmethod
     def match(packages, query):
@@ -290,7 +298,7 @@ class PackageMatcher:
                     if numeric_query == tracking_clean:
                         return p
 
-            logger.info(f"❌ No match found for query: '{query}'")
+            logger.info(f" No match found for query: '{query}'")
             return None
         except Exception as e:
             logger.error(f"PackageMatcher error: {e}")
@@ -312,7 +320,7 @@ def resolve_package(handler_input, packages: List[Dict]):
 
 
 def handle_package_event(event: Dict, context: Any) -> Dict:
-    logger.info(f"📦 Webhook event received")
+    logger.info(f"Webhook event received")
     data = event.get('data', {})
 
     account_id = data.get('account_id')
@@ -330,64 +338,78 @@ def handle_package_event(event: Dict, context: Any) -> Dict:
     if not account_id or not tracking_number:
         return {"status": "error", "message": "Missing account_id or tracking_number"}
 
-    resident = None
-    if account_id:
-        resident = db.get_resident_by_account_id(account_id)
+    # Find resident
+    resident = db.get_resident_by_account_id(account_id)
     if not resident and unit:
         resident = db.get_resident_by_unit(unit)
     if not resident:
         return {"status": "error", "message": "No resident found"}
 
     if not resident.get('opted_in', False):
-        logger.info(f"Resident {resident.get('id')} not opted in — skipping notification, saving package only")
+        logger.info(f"Resident {resident.get('id')} not opted in — saving package only")
 
     alexa_user_id = resident.get('alexa_user_id')
 
+    # Save or update package by tracking_number + resident_id
     package_row, is_new = db.save_or_update_package(
-        resident_id=resident['id'], tracking_number=tracking_number, carrier=carrier,
-        package_id=package_id, compartment=compartment, delivered_at=delivered_at,
-        unit=unit, description=description
+        resident_id=resident['id'],
+        tracking_number=tracking_number,
+        carrier=carrier,
+        package_id=package_id,
+        compartment=compartment,
+        delivered_at=delivered_at,
+        unit=unit,
+        description=description
     )
+    
     if not package_row:
         return {"status": "error", "message": "Failed to save package"}
 
-    logger.info(f"📦 Package saved: id={package_row.get('id')}, is_new={is_new}")
+    logger.info(f"Package saved: id={package_row.get('id')}, is_new={is_new}")
 
     if not alexa_user_id or not resident.get('opted_in', False):
         db.log_notification(package_row['id'], "skipped", "No Alexa link or not opted in")
         return {"status": "skipped", "reason": "No Alexa User ID linked or not opted in"}
 
-    should_notify = is_new
-    if not should_notify:
-        waiting_days = calculate_waiting_days(delivered_at)
-        reminder_days = [3, 5, 7, 10, 14, 21, 30]
-        if waiting_days in reminder_days:
-            last_notified = package_row.get('last_notified_at')
-            if not last_notified:
-                should_notify = True
-            else:
-                try:
-                    last_dt = datetime.strptime(last_notified, '%Y-%m-%d %H:%M:%S') if isinstance(last_notified, str) else last_notified
-                    if last_dt.date() != datetime.now().date():
-                        should_notify = True
-                except Exception:
+    # Calculate waiting days from delivered_at
+    waiting_days = calculate_waiting_days(delivered_at)
+    
+    # Determine if we should notify
+    should_notify = False
+    reminder_days = [0, 3, 5, 7, 10, 14, 21, 30]
+    
+    # Always notify on first delivery (day 0) or if it's a reminder day
+    if is_new or waiting_days in reminder_days:
+        # Check if already notified today for this package
+        last_notified = package_row.get('last_notified_at')
+        if not last_notified:
+            should_notify = True
+        else:
+            try:
+                last_dt = datetime.strptime(last_notified, '%Y-%m-%d %H:%M:%S') if isinstance(last_notified, str) else last_notified
+                if last_dt.date() != datetime.now().date():
                     should_notify = True
-            if should_notify:
-                db.increment_reminder(package_row['id'])
+                    if not is_new:
+                        db.increment_reminder(package_row['id'])
+            except Exception:
+                should_notify = True
 
     if should_notify:
         result = alexa_client.send_notification(
-            alexa_user_id, carrier, package_id, tracking_number, compartment, delivered_at_raw, unit
+            alexa_user_id, carrier, package_id, tracking_number,
+            compartment, delivered_at_raw, unit
         )
         if result.get('status') == 'success':
             db.mark_package_notified(package_row['id'])
-            db.log_notification(package_row['id'], "sent", "Success")
-            return {"status": "success", "package_id": package_id, "message": "Notification sent"}
+            # Reset heard_at so user hears it again
+            db.reset_heard_at(package_row['id'])
+            db.log_notification(package_row['id'], "sent", f"Success, is_new={is_new}, waiting_days={waiting_days}")
+            return {"status": "success", "package_id": package_id, "message": f"Notification sent, waiting {waiting_days} days"}
         else:
             db.log_notification(package_row['id'], "failed", result.get('message'))
             return {"status": "error", "package_id": package_id, "error": result.get('message')}
 
-    logger.info(f"ℹ️ Package {tracking_number} already notified today, skipping")
+    logger.info(f" Package {tracking_number} already notified today, skipping")
     db.log_notification(package_row['id'], "skipped", "already_notified_today")
     return {"status": "no_action", "reason": "already_notified_today"}
 
@@ -401,7 +423,7 @@ class LaunchRequestHandler(AbstractRequestHandler):
         session_attr = handler_input.attributes_manager.session_attributes
         session_attr.pop('current_package', None)
 
-        packages = get_status_report_packages(resident)
+        packages = get_status_report_packages(handler_input, resident)
 
         if packages:
             welcome = "Welcome to Notifii Alert."
@@ -437,7 +459,7 @@ class PackageStatusIntentHandler(AbstractRequestHandler):
 
     def handle(self, handler_input):
         resident = get_current_resident(handler_input)
-        packages = get_status_report_packages(resident)
+        packages = get_status_report_packages(handler_input, resident)
         if not packages:
             return handler_input.response_builder.speak("You don't have any new notifications right now.").response
         speak_output = get_package_summary(packages)
@@ -450,33 +472,52 @@ class PackageDetailsIntentHandler(AbstractRequestHandler):
 
     def handle(self, handler_input):
         resident = get_current_resident(handler_input)
-        packages = get_packages_for_resident_safe(resident)
+        if not resident:
+            return handler_input.response_builder.speak("You have no packages.").response
+        
+        packages = db.get_packages_for_resident(resident['id'])
         if not packages:
             return handler_input.response_builder.speak("You have no packages.").response
 
         session_attr = handler_input.attributes_manager.session_attributes
         tracking_value = get_slot_value(handler_input, 'tracking')
         logger.info(f"🔍 PackageDetailsIntent - tracking_value: '{tracking_value}'")
-
+        
+        # If user mentions tracking number, give details ONLY for that package
         if tracking_value:
             found = PackageMatcher.match(packages, tracking_value)
             if found:
-                session_attr['current_package'] = found
                 speak_output = format_full_package_details(found)
                 return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
             else:
                 speak_output = f"I couldn't find a package matching '{tracking_value}'. " + get_package_summary(packages)
                 return handler_input.response_builder.speak(speak_output).ask("Which package would you like details about?").response
-
-        if len(packages) == 1:
-            found = packages[0]
-            session_attr['current_package'] = found
-            speak_output = format_full_package_details(found)
+        
+        # No tracking specified — give details for ALL packages in current session
+        announced_package_ids = session_attr.get('announced_packages', [])
+        
+        if announced_package_ids:
+            # Get all packages announced in this session
+            session_packages = [p for p in packages if p['id'] in announced_package_ids]
+        else:
+            # If no announced packages, use all packages
+            session_packages = packages
+        
+        if not session_packages:
+            return handler_input.response_builder.speak("You have no new notifications.").response
+        
+        # If only one package, give full details
+        if len(session_packages) == 1:
+            speak_output = format_full_package_details(session_packages[0])
             return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
-
-        speak_output = get_package_summary(packages) + " Which package would you like more details about? You can say the tracking number or carrier name."
-        return handler_input.response_builder.speak(speak_output).ask("Which package would you like details about?").response
-
+        
+        # Multiple packages — give details for all
+        details_list = []
+        for p in session_packages:
+            details_list.append(format_full_package_details(p))
+        
+        speak_output = "Here are the details for your packages: " + " Also, ".join(details_list)
+        return handler_input.response_builder.speak(speak_output).ask("Would you like to know anything else?").response
 
 class DeliveryInquiryIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):

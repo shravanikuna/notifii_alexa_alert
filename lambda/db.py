@@ -118,7 +118,7 @@ def link_account_id_to_alexa(account_id: str, alexa_user_id: str, region: str = 
 def save_or_update_package(resident_id: int, tracking_number: str, carrier: str,
                            package_id: str, compartment: str, delivered_at: str,
                            unit: str = None, description: str = None):
-    logger.info(f"📝 save_or_update_package: tracking={tracking_number}")
+    logger.info(f"save_or_update_package: tracking={tracking_number}")
 
     try:
         conn = get_connection()
@@ -154,7 +154,7 @@ def save_or_update_package(resident_id: int, tracking_number: str, carrier: str,
             updated = select_cursor.fetchone()
             select_cursor.close()
             conn.close()
-            logger.info(f"✅ Package updated: {updated['id']}")
+            logger.info(f"Package updated: {updated['id']}")
             return updated, False
 
         insert_cursor = conn.cursor()
@@ -180,11 +180,11 @@ def save_or_update_package(resident_id: int, tracking_number: str, carrier: str,
         new_row = select_cursor.fetchone()
         select_cursor.close()
         conn.close()
-        logger.info(f"✅ New package inserted: {new_row['id']}")
+        logger.info(f"New package inserted: {new_row['id']}")
         return new_row, True
 
     except Error as e:
-        logger.error(f"❌ save_or_update_package error: {e}")
+        logger.error(f"save_or_update_package error: {e}")
         return None, False
 
 def get_packages_for_resident(resident_id: int):
@@ -252,7 +252,7 @@ def log_notification(package_id: int, status: str, status_reason: str = None):
         conn.commit()
         cursor.close()
         conn.close()
-        logger.info(f"📝 Notification log: package_id={package_id}, status={status}")
+        logger.info(f"Notification log: package_id={package_id}, status={status}")
     except Error as e:
         logger.error(f"log_notification error: {e}")
 
@@ -287,7 +287,7 @@ def mark_packages_heard(package_row_ids):
         conn.commit()
         cursor.close()
         conn.close()
-        logger.info(f"✅ Marked {len(package_row_ids)} packages as heard")
+        logger.info(f"Marked {len(package_row_ids)} packages as heard")
     except Error as e:
         logger.error(f"mark_packages_heard error: {e}")
 
@@ -301,3 +301,19 @@ def update_last_session(resident_id: int):
         conn.close()
     except Error as e:
         logger.error(f"update_last_session error: {e}")
+
+def reset_heard_at(package_id: int):
+    """Reset heard_at so the package is announced again."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE packages SET heard_at = NULL WHERE id = %s",
+            (package_id,)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+        logger.info(f"Reset heard_at for package {package_id}")
+    except Error as e:
+        logger.error(f"reset_heard_at error: {e}")
