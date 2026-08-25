@@ -16,19 +16,15 @@ import db
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# ============================================
-# CONFIGURATION
-# ============================================
 class Config:
     ALEXA_CLIENT_ID = os.environ.get('ALEXA_CLIENT_ID', '').strip()
     ALEXA_CLIENT_SECRET = os.environ.get('ALEXA_CLIENT_SECRET', '').strip()
     ALEXA_API_URL = os.environ.get('ALEXA_API_URL', '').strip()
 
 config = Config()
+SESSION_GAP_THRESHOLD_DAYS = 2
 
-# ============================================
-# DATETIME HELPERS
-# ============================================
+
 def parse_iso_to_mysql_datetime(iso_string: Optional[str]) -> Optional[str]:
     if not iso_string:
         return None
@@ -40,19 +36,18 @@ def parse_iso_to_mysql_datetime(iso_string: Optional[str]) -> Optional[str]:
         return None
 
 def calculate_waiting_days(delivered_at: Optional[str]) -> int:
+    """FIXED: compares calendar dates, not raw elapsed hours, so 'yesterday' never shows as 'today'."""
     if not delivered_at:
         return 0
     try:
         dt = datetime.strptime(delivered_at, '%Y-%m-%d %H:%M:%S') if isinstance(delivered_at, str) else delivered_at
-        days = (datetime.now() - dt).days
+        days = (datetime.now().date() - dt.date()).days
         return days if days > 0 else 0
     except Exception as e:
         logger.error(f"calculate_waiting_days error: {e}")
         return 0
 
-# ============================================
-# ALEXA PROACTIVE EVENTS CLIENT
-# ============================================
+
 class AlexaProactiveEventsClient:
     def __init__(self):
         self.client_id = config.ALEXA_CLIENT_ID
@@ -119,9 +114,7 @@ class AlexaProactiveEventsClient:
 
 alexa_client = AlexaProactiveEventsClient()
 
-# ============================================
-# HELPERS
-# ============================================
+
 def get_slot_value(handler_input, slot_name: str) -> Optional[str]:
     try:
         intent = handler_input.request_envelope.request.intent
@@ -201,7 +194,6 @@ def get_package_summary(packages: List[Dict]) -> str:
     return f"You have packages {', '.join(descriptions[:-1])}, and {descriptions[-1]}."
 
 def get_current_resident(handler_input) -> Optional[Dict]:
-    """Resolved fresh on every request — no shared global state, no cross-user leaks."""
     alexa_user_id = handler_input.request_envelope.context.system.user.user_id
     return db.get_resident_by_alexa_id(alexa_user_id)
 
@@ -209,6 +201,36 @@ def get_packages_for_resident_safe(resident: Optional[Dict]) -> List[Dict]:
     if not resident:
         return []
     return db.get_packages_for_resident(resident['id'])
+
+def get_status_report_packages(resident: Optional[Dict]) -> List[Dict]:
+    """
+    What LaunchRequestHandler / PackageStatusIntentHandler announce.
+    Only unheard packages, UNLESS resident hasn't opened the skill in
+    2+ days — then everything gets re-announced once as a safety net.
+    """
+    if not resident:
+        return []
+    resident_id = resident['id']
+    last_session_at = resident.get('last_session_at')
+
+    gap_days = None
+    if last_session_at:
+        try:
+            last_dt = datetime.strptime(last_session_at, '%Y-%m-%d %H:%M:%S') if isinstance(last_session_at, str) else last_session_at
+            gap_days = (datetime.now() - last_dt).days
+        except Exception:
+            gap_days = None
+
+    if gap_days is None or gap_days >= SESSION_GAP_THRESHOLD_DAYS:
+        packages = db.get_packages_for_resident(resident_id)
+    else:
+        packages = db.get_unheard_packages_for_resident(resident_id)
+
+    if packages:
+        db.mark_packages_heard([p['id'] for p in packages])
+    db.update_last_session(resident_id)
+
+    return packages
 
 
 class PackageMatcher:
@@ -271,9 +293,6 @@ def resolve_package(handler_input, packages: List[Dict]):
     return ("no_selector", None)
 
 
-# ============================================
-# WEBHOOK HANDLER
-# ============================================
 def handle_package_event(event: Dict, context: Any) -> Dict:
     logger.info(f"📦 Webhook event received")
     data = event.get('data', {})
@@ -355,9 +374,6 @@ def handle_package_event(event: Dict, context: Any) -> Dict:
     return {"status": "no_action", "reason": "already_notified_today"}
 
 
-# ============================================
-# INTENT HANDLERS
-# ============================================
 class LaunchRequestHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
         return ask_utils.is_request_type("LaunchRequest")(handler_input)
@@ -367,8 +383,8 @@ class LaunchRequestHandler(AbstractRequestHandler):
         session_attr = handler_input.attributes_manager.session_attributes
         session_attr.pop('current_package', None)
 
-        packages = get_status_report_packages(resident) if resident else []   # ← was get_packages_for_resident_safe(resident)
-   
+        packages = get_status_report_packages(resident)
+
         if packages:
             welcome = "Welcome to Notifii Alert."
             package_list = []
@@ -386,13 +402,13 @@ class LaunchRequestHandler(AbstractRequestHandler):
                     package_list.append(f"from {carrier} with tracking {tracking}")
 
             if len(package_list) == 1:
-                speak_output = f"{welcome} You have a package {package_list[0]}. You can ask for more details."
+                speak_output = f"{welcome} You have a new package {package_list[0]}. You can ask for more details."
             elif len(package_list) == 2:
-                speak_output = f"{welcome} You have packages {package_list[0]} and {package_list[1]}. You can ask for more details."
+                speak_output = f"{welcome} You have new packages {package_list[0]} and {package_list[1]}. You can ask for more details."
             else:
-                speak_output = f"{welcome} You have packages {', '.join(package_list[:-1])}, and {package_list[-1]}. You can ask for more details."
+                speak_output = f"{welcome} You have new packages {', '.join(package_list[:-1])}, and {package_list[-1]}. You can ask for more details."
         else:
-            speak_output = "Welcome to Notifii Alert. You have no packages at the moment."
+            speak_output = "Welcome to Notifii Alert. You have no new notifications right now."
 
         return handler_input.response_builder.speak(speak_output).ask("How can I help you?").response
 
@@ -401,13 +417,13 @@ class PackageStatusIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
         return ask_utils.is_intent_name("PackageStatusIntent")(handler_input)
 
-def handle(self, handler_input):
-    resident = get_current_resident(handler_input)
-    packages = get_status_report_packages(resident) if resident else []   # ← was get_packages_for_resident_safe(resident)
-    if not packages:
-        return handler_input.response_builder.speak("You don't have any new notifications right now.").response
-    speak_output = get_package_summary(packages)
-    return handler_input.response_builder.speak(speak_output).ask("Would you like details about any package?").response
+    def handle(self, handler_input):
+        resident = get_current_resident(handler_input)
+        packages = get_status_report_packages(resident)
+        if not packages:
+            return handler_input.response_builder.speak("You don't have any new notifications right now.").response
+        speak_output = get_package_summary(packages)
+        return handler_input.response_builder.speak(speak_output).ask("Would you like details about any package?").response
 
 
 class PackageDetailsIntentHandler(AbstractRequestHandler):
@@ -518,7 +534,7 @@ class CarrierInquiryIntentHandler(AbstractRequestHandler):
             return handler_input.response_builder.speak("You have no packages.").response
 
         session_attr = handler_input.attributes_manager.session_attributes
-        carrier_value = get_slot_value(handler_input, 'carrier')  # FIXED: was reading 'tracking' before
+        carrier_value = get_slot_value(handler_input, 'carrier')
 
         if carrier_value:
             found = PackageMatcher.match(packages, carrier_value)
@@ -677,39 +693,7 @@ class SessionEndedRequestHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         return handler_input.response_builder.response
 
-SESSION_GAP_THRESHOLD_DAYS = 2
 
-def get_status_report_packages(resident: Dict) -> List[Dict]:
-    """
-    What LaunchRequestHandler / PackageStatusIntentHandler announce.
-    Rule: only report packages the resident hasn't heard yet — unless
-    they haven't opened the skill in 2+ days, in which case report
-    everything again (per spec: long absence = re-announce all).
-    """
-    resident_id = resident['id']
-    last_session_at = resident.get('last_session_at')
-
-    gap_days = None
-    if last_session_at:
-        try:
-            last_dt = datetime.strptime(last_session_at, '%Y-%m-%d %H:%M:%S') if isinstance(last_session_at, str) else last_session_at
-            gap_days = (datetime.now() - last_dt).days
-        except Exception:
-            gap_days = None
-
-    if gap_days is None or gap_days >= SESSION_GAP_THRESHOLD_DAYS:
-        packages = db.get_packages_for_resident(resident_id)  # full list
-    else:
-        packages = db.get_unheard_packages_for_resident(resident_id)  # only new ones
-
-    if packages:
-        db.mark_packages_heard([p['id'] for p in packages])
-    db.update_last_session(resident_id)
-
-    return packages
-# ============================================
-# SKILL BUILDER REGISTRATION
-# ============================================
 sb = SkillBuilder()
 sb.add_request_handler(SkillPermissionChangedHandler())
 sb.add_request_handler(SkillDisabledHandler())
