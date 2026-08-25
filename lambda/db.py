@@ -255,3 +255,44 @@ def log_notification(package_id: int, status: str, status_reason: str = None):
         logger.info(f"📝 Notification log: package_id={package_id}, status={status}")
     except Error as e:
         logger.error(f"log_notification error: {e}")
+
+def get_unheard_packages_for_resident(resident_id: int):
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT * FROM packages WHERE resident_id = %s AND heard_at IS NULL ORDER BY delivered_at DESC",
+            (resident_id,)
+        )
+        results = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return results
+    except Error as e:
+        logger.error(f"get_unheard_packages_for_resident error: {e}")
+        return []
+
+def mark_packages_heard(package_row_ids):
+    if not package_row_ids:
+        return
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        format_ids = ','.join(['%s'] * len(package_row_ids))
+        cursor.execute(f"UPDATE packages SET heard_at = NOW() WHERE id IN ({format_ids})", tuple(package_row_ids))
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Error as e:
+        logger.error(f"mark_packages_heard error: {e}")
+
+def update_last_session(resident_id: int):
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE residents SET last_session_at = NOW() WHERE id = %s", (resident_id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Error as e:
+        logger.error(f"update_last_session error: {e}")

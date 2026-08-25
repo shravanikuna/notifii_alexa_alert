@@ -367,8 +367,8 @@ class LaunchRequestHandler(AbstractRequestHandler):
         session_attr = handler_input.attributes_manager.session_attributes
         session_attr.pop('current_package', None)
 
-        packages = get_packages_for_resident_safe(resident)
-
+        packages = get_status_report_packages(resident) if resident else []   # ← was get_packages_for_resident_safe(resident)
+   
         if packages:
             welcome = "Welcome to Notifii Alert."
             package_list = []
@@ -401,13 +401,13 @@ class PackageStatusIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
         return ask_utils.is_intent_name("PackageStatusIntent")(handler_input)
 
-    def handle(self, handler_input):
-        resident = get_current_resident(handler_input)
-        packages = get_packages_for_resident_safe(resident)
-        if not packages:
-            return handler_input.response_builder.speak("You have no packages right now.").response
-        speak_output = get_package_summary(packages)
-        return handler_input.response_builder.speak(speak_output).ask("Would you like details about any package?").response
+def handle(self, handler_input):
+    resident = get_current_resident(handler_input)
+    packages = get_status_report_packages(resident) if resident else []   # ← was get_packages_for_resident_safe(resident)
+    if not packages:
+        return handler_input.response_builder.speak("You don't have any new notifications right now.").response
+    speak_output = get_package_summary(packages)
+    return handler_input.response_builder.speak(speak_output).ask("Would you like details about any package?").response
 
 
 class PackageDetailsIntentHandler(AbstractRequestHandler):
@@ -677,7 +677,36 @@ class SessionEndedRequestHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         return handler_input.response_builder.response
 
+SESSION_GAP_THRESHOLD_DAYS = 2
 
+def get_status_report_packages(resident: Dict) -> List[Dict]:
+    """
+    What LaunchRequestHandler / PackageStatusIntentHandler announce.
+    Rule: only report packages the resident hasn't heard yet — unless
+    they haven't opened the skill in 2+ days, in which case report
+    everything again (per spec: long absence = re-announce all).
+    """
+    resident_id = resident['id']
+    last_session_at = resident.get('last_session_at')
+
+    gap_days = None
+    if last_session_at:
+        try:
+            last_dt = datetime.strptime(last_session_at, '%Y-%m-%d %H:%M:%S') if isinstance(last_session_at, str) else last_session_at
+            gap_days = (datetime.now() - last_dt).days
+        except Exception:
+            gap_days = None
+
+    if gap_days is None or gap_days >= SESSION_GAP_THRESHOLD_DAYS:
+        packages = db.get_packages_for_resident(resident_id)  # full list
+    else:
+        packages = db.get_unheard_packages_for_resident(resident_id)  # only new ones
+
+    if packages:
+        db.mark_packages_heard([p['id'] for p in packages])
+    db.update_last_session(resident_id)
+
+    return packages
 # ============================================
 # SKILL BUILDER REGISTRATION
 # ============================================
