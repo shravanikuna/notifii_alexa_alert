@@ -273,16 +273,21 @@ def get_unheard_packages_for_resident(resident_id: int):
         return []
 
 def mark_packages_heard(package_row_ids):
+    """Mark packages as heard by the user."""
     if not package_row_ids:
         return
     try:
         conn = get_connection()
         cursor = conn.cursor()
         format_ids = ','.join(['%s'] * len(package_row_ids))
-        cursor.execute(f"UPDATE packages SET heard_at = NOW() WHERE id IN ({format_ids})", tuple(package_row_ids))
+        cursor.execute(
+            f"UPDATE packages SET heard_at = NOW() WHERE id IN ({format_ids})",
+            tuple(package_row_ids)
+        )
         conn.commit()
         cursor.close()
         conn.close()
+        logger.info(f"✅ Marked {len(package_row_ids)} packages as heard")
     except Error as e:
         logger.error(f"mark_packages_heard error: {e}")
 

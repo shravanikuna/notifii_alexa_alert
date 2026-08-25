@@ -204,34 +204,52 @@ def get_packages_for_resident_safe(resident: Optional[Dict]) -> List[Dict]:
 
 def get_status_report_packages(resident: Optional[Dict]) -> List[Dict]:
     """
-    What LaunchRequestHandler / PackageStatusIntentHandler announce.
-    Only unheard packages, UNLESS resident hasn't opened the skill in
-    2+ days — then everything gets re-announced once as a safety net.
+    Returns packages that should be announced to the user:
+    - Unheard packages (never heard by user)
+    - OR packages that have been heard but have new notifications (reminders)
     """
     if not resident:
         return []
+    
     resident_id = resident['id']
-    last_session_at = resident.get('last_session_at')
-
-    gap_days = None
-    if last_session_at:
-        try:
-            last_dt = datetime.strptime(last_session_at, '%Y-%m-%d %H:%M:%S') if isinstance(last_session_at, str) else last_session_at
-            gap_days = (datetime.now() - last_dt).days
-        except Exception:
-            gap_days = None
-
-    if gap_days is None or gap_days >= SESSION_GAP_THRESHOLD_DAYS:
-        packages = db.get_packages_for_resident(resident_id)
-    else:
-        packages = db.get_unheard_packages_for_resident(resident_id)
-
-    if packages:
-        db.mark_packages_heard([p['id'] for p in packages])
+    
+    # Get ALL packages for this resident
+    all_packages = db.get_packages_for_resident(resident_id)
+    
+    # Filter: Only packages that are either:
+    # 1. Not heard yet (heard_at IS NULL)
+    # 2. Have been notified recently (last_notified_at > heard_at)
+    unheard_or_new = []
+    
+    for p in all_packages:
+        heard_at = p.get('heard_at')
+        last_notified_at = p.get('last_notified_at')
+        
+        # If never heard, include it
+        if heard_at is None:
+            unheard_or_new.append(p)
+            continue
+        
+        # If heard but there's a new notification (reminder) after the last hear time
+        if last_notified_at and heard_at:
+            try:
+                last_notified_dt = datetime.strptime(last_notified_at, '%Y-%m-%d %H:%M:%S') if isinstance(last_notified_at, str) else last_notified_at
+                heard_dt = datetime.strptime(heard_at, '%Y-%m-%d %H:%M:%S') if isinstance(heard_at, str) else heard_at
+                
+                # If there's a new notification after the user heard it, include it
+                if last_notified_dt > heard_dt:
+                    unheard_or_new.append(p)
+            except Exception:
+                # If we can't parse dates, include it to be safe
+                unheard_or_new.append(p)
+    
+    # Mark all returned packages as heard (user is about to hear them)
+    if unheard_or_new:
+        db.mark_packages_heard([p['id'] for p in unheard_or_new])
+    
     db.update_last_session(resident_id)
-
-    return packages
-
+    
+    return unheard_or_new
 
 class PackageMatcher:
     @staticmethod
